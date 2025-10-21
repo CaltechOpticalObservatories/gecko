@@ -32,7 +32,7 @@ class Triage_Tools(object):
     def __init__(self, config: str):
         self.config = config
         # Get UTC date for log grab and report naming
-        self.UTC_date = datetime.now(timezone.utc)
+        self.utc_date = datetime.now(timezone.utc)
         # Extract the date part
         self.current_utc_date = str(self.UTC_date.date())
 
@@ -51,16 +51,16 @@ class Triage_Tools(object):
 
         # Read the .ini file TODO: Change to config.ini later
         #Report Section
-        self.log_lookback_hour = self.config["Report"]["LogLookbackHours"]
-        self.EmailAlerts = self.config["Report"]["EmailAlerts"]
-        self.Instrument_Master_Email = self.config["Report"]["Instrument_Master_Email"]
-        self.Reports_Path = self.config["Report"]["ReportPath"]
+        self.log_lookback_hour = self.config["Report"]["log_lookback_hours"]
+        self.email_alerts = self.config["Report"]["email_alerts"]
+        self.instrument_master_emailmail = self.config["Report"]["instrument_master_email"]
+        self.reports_path = self.config["Report"]["report_path"]
         #Machine Section
-        self.CPUThreshold = self.config["Machine"]["CPUThreshold"]
-        self.MemoryThreshold = self.config["Machine"]["MemoryThreshold"]
+        self.cpu_threshold = self.config["Machine"]["cpu_threshold"]
+        self.memory_threshold = self.config["Machine"]["memory_threshold"]
         #System
-        self.OS = self.config["System"]["OS"]
-        self.OS_Version = self.config["System"]["Version"]
+        self.os = self.config["System"]["os"]
+        self.os_version = self.config["System"]["os_version"]
         #Logs Section of ini file
         self.system_log = self.config["Logs"]["system"]
 
@@ -68,9 +68,10 @@ class Triage_Tools(object):
         self.host = self.config["VNC"]["host"]
         self.user = self.config["VNC"]["user"]
         self.password = self.config["VNC"]["password"]
-        self.vnc_sessions = self.config["VNC"]["vnc_sessions"]
+        temp_sessions = self.config["VNC"]["vnc_sessions"]
+        self.vnc_sessions = [int(num.strip()) for num in temp_sessions.split(',')]
         #Make report file name
-        self.report_name = f"{self.report_path}/gecko_report_{self.current_utc_date}.txt"
+        self.report_name = f"{self.reports_path}/gecko_report_{self.current_utc_date}.txt"
 
         print("Configuration loaded successfully.")
 
@@ -110,11 +111,11 @@ class Triage_Tools(object):
                 raw_image = await vnc_client.screenshot()
 
                 image = Image.fromarray(raw_image)
-                image.save(self.Reports_Path+ screenshot_name)
+                image.save(self.reports_path+ screenshot_name)
             ######vncdotool implementation
             # connect to host and session
             with api.connect(f'{self.host}::{session}', password=f"{self.password}") as vnc_client:
-                vnc_client.captureScreen(self.Reports_Path+screenshot_name)
+                vnc_client.captureScreen(self.reports_path+screenshot_name)
 
 
     def comb_logs(self):
