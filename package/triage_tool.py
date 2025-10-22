@@ -11,46 +11,155 @@
 #NOTE:: pip install the items below;not included in python standard packages
 #       pip install pyscreenshot
 #       pip install psutil
+#       pip install vncdotool
+#       pip install pillow
+#       pip install asyncvnc
 #                       -Elijah Anakalea-Buckley
 
-import pathlib
 import os
-import pyautogui
-import subprocess
 import psutil
 import configparser
 import smtplib
 import re
 from datetime import datetime, timezone
-import pyscreenshot as ImageGrab
+import pyscreenshot as ImageGrab #For Wayland Primarily
+import asyncio, asyncvnc
+from PIL import Image
+from vncdotool import api
 
 class Triage_Tools(object):
 
     def __init__(self, config: str):
         self.config = config
         # Get UTC date for log grab and report naming
-        self.UTC_date = str(datetime.utcnow().date())
+        self.utc_date = datetime.now(timezone.utc)
+        # Extract the date part
+        self.current_utc_date = str(self.UTC_date.date())
 
         # Load config file
         self.load_config()
 
     def load_config(self):
         ''' Load the configuration file '''
+        if not os.path.exists(self.config):
+            raise FileNotFoundError(f"Configuration file {self.config} not found")
+        
+        # Create a ConfigParser object
+        self.config = configparser.ConfigParser()
+        self.config.read(self.config)
 
-    def gather_logs(self):
-        ''' Gather logs from specified sources '''
+        # Read the .ini file TODO: Change to config.ini later
+        #Report Section
+        self.log_lookback_hour = self.config["Report"]["log_lookback_hours"]
+        self.email_alerts = self.config["Report"]["email_alerts"]
+        self.instrument_master_emailmail = self.config["Report"]["instrument_master_email"]
+        self.reports_path = self.config["Report"]["report_path"]
+        #Machine Section
+        self.cpu_threshold = self.config["Machine"]["cpu_threshold"]
+        self.memory_threshold = self.config["Machine"]["memory_threshold"]
+        #System
+        self.os = self.config["System"]["os"]
+        self.os_version = self.config["System"]["os_version"]
+        #Logs Section of ini file
+        self.system_log = self.config["Logs"]["system"]
+
+        #VNC information
+        self.host = self.config["VNC"]["host"]
+        self.user = self.config["VNC"]["user"]
+        self.password = self.config["VNC"]["password"]
+        temp_sessions = self.config["VNC"]["vnc_sessions"]
+        self.vnc_sessions = [int(num.strip()) for num in temp_sessions.split(',')]
+        #Make report file name
+        self.report_name = f"{self.reports_path}/gecko_report_{self.current_utc_date}.txt"
+
+        print("Configuration loaded successfully.")
 
     def gather_system_info(self):
         ''' Gather system information such as CPU, memory, disk usage '''
+        # All CPU data from psutil
+        #Interval, usage over that period in sec; perself.cpu = separates
+        #TODO: Thread so other things can execute over the interval
+        self.cpu_detailed_usage = psutil.cpu_times_percent(interval=5, percpu=True)
+        self.cpu_count_logical = psutil.cpu_count(logical=True)
+        self.cpu_count_physical = psutil.cpu_count(logical=False)
+        #Parse and separate frq "per cpu" to be readable
+        self.cpu_freq = psutil.cpu_freq(percpu=True)
+        self.cpu_stats = psutil.cpu_stats()
+        self.cpu_times = psutil.cpu_times()
+        #Parse and separate usage "per cpu" to be readable
+        #Interval, usage over that period in sec; perself.cpu = separates
+        self.cpu_detailed_usage = psutil.cpu_times_percent(interval=5, percpu=True)
+
+        # Temperature
+        self.temps = psutil.sensors_temperatures()
+        # Memory
+        self.virtual_memory = psutil.virtual_memory()
 
     def gather_instrument_info(self):
         ''' Gather information from connected instruments '''
+        #TODO:: Not required but a later feature for possibly gathering Info from Daemons
 
-    def take_screenshots(self):
+    async def take_screenshots(self):
         ''' Take screenshots of the system state on all possible monitors '''
+        # Use acync to go into vnc session and take screenshots
+        #TODO: Needs Testing! may switch to something else,  2 other easy implementable methods
+        for session in self.vnc_sessions:
+            screenshot_name = f"gecko_screenshot_{session}_{self.current_utc_date}.png"
+            async with asyncvnc.connect(self.host, session, self.user, self.password) as vnc_client:
+                #Take screenshot
+                raw_image = await vnc_client.screenshot()
+
+                image = Image.fromarray(raw_image)
+                image.save(self.reports_path+ screenshot_name)
+            ######vncdotool implementation
+            # connect to host and session
+            with api.connect(f'{self.host}::{session}', password=f"{self.password}") as vnc_client:
+                vnc_client.captureScreen(self.reports_path+screenshot_name)
+
 
     def comb_logs(self):
         ''' Comb logs for errors and warnings '''
+
+        #Iterate through log paths in config file
+        for log in self.config["Logs"]:
+            log_path = self.config["Logs"][log]
+            #TODO: Put log_path into report file
+            with open(self.report_name, 'w') as file:
+                file.write(f"\n\n====={log_path}=====")
+            if os.path.exists(log_path):
+                print(f"Gathering log from {log_path}")
+                try:
+                    with open(log_path, 'r') as log_file:
+                        #Search for occurances of warnings and errors sequentially
+                        #TODO::test regex quicker find
+                        full_log = log_file.read()
+                        matches = (re.findeall("^.*error.*$|^.*warning.*$",
+                                                        full_log, re.IGNORECASE))
+                        with open(self.report_name, 'w') as report_file:
+                            for match in matches:
+                                report_file.write(match)
+                        #########TODO:: Decide: above or bottom
+                        for line in log_file:
+                            #Process each line as needed using regex
+                            #TODO: Process lines and add to report file
+                            if(re.search("warning", line, re.IGNORECASE) or 
+                                        re.search("error", line, re.IGNORECASE)):
+                                with open(self.report_name, 'w') as report_file:
+                                    report_file.write(line.strip())
+                        
+                        #TODO:: Populate Template
+                
+                except FileNotFoundError:
+                    print(f"Error: The file at {log_path} was not found.")
+                except PermissionError:
+                    print(f"Error: Permission denied to access the file at {log_path}.")
+                except Exception as e:
+                    print(f"An unexpected error occurred: {e}")
+            else:
+                print(f"Log path {log_path} does not exist.")
+
+        #Parse system logs differently
+        #TODO: Implement System Comb Maybe
 
     def generate_report(self):
         ''' Generate a report based on gathered data using template engine'''
@@ -58,6 +167,3 @@ class Triage_Tools(object):
 
     def send_report(self):
         ''' Send the generated report to specified recipients '''
-
-
-def main():
