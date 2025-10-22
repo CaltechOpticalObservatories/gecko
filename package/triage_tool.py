@@ -41,9 +41,8 @@ class Triage_Tools(object):
 
     def load_config(self):
         ''' Load the configuration file '''
-        config_path = os.path.join(self.script_dir, self.config)
-        if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Configuration file {self.config} not found in {self.script_dir}")
+        if not os.path.exists(self.config):
+            raise FileNotFoundError(f"Configuration file {self.config} not found")
         
         # Create a ConfigParser object
         self.config = configparser.ConfigParser()
