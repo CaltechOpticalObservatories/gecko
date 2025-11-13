@@ -24,8 +24,8 @@ To install the package in editable mode (ideal for development), follow these st
 First, clone the repository to your local machine:
 
 ```bash
-git clone https://github.com/yourusername/your-package-name.git
-cd your-package-name
+git clone https://github.com/CaltechOpticalObservatories/gecko.git
+cd gecko
 ```
 
 ### 2. Set Up Your Python Environment
@@ -45,23 +45,6 @@ Make sure setuptools and pip are up to date:
 pip install --upgrade pip setuptools wheel
 ```
 
-## Setting Up Your Package
-### 1. Update pyproject.toml
-
-The pyproject.toml file contains the configuration for building and packaging your Python project. You'll want to customize this to reflect your package's name, version, dependencies, license, etc.
-```yml
-    name: The name of your package.
-    version: The version of your package (e.g., "0.1.0").
-    dependencies: List any runtime dependencies your package requires (e.g., requests, numpy).
-    license: Specify your package's license, either as text or a file. For example:
-        license = { text = "MIT" }
-        Or, if you have a LICENSE file: license = { file = "LICENSE.txt" }
-```
-
-### 2. Update README.md
-
-Edit this README file to reflect your package's functionality.
-
 ## Installing Dependencies
 
 To install your package in editable mode for development, use the following command:
@@ -78,25 +61,32 @@ To install any optional dependencies, such as development dependencies, use:
 pip install -e .[dev]
 ```
 
-## Building Your Package
+### Filling Out Config File
 
-To build your package for distribution (e.g., for uploading to PyPI), you can use:
-
+## Logs
+Logs will have the path to any and all logs you would like to comb upon execution. This includes the system logs on more . This tool with comb the last 24 hours for ERRORS or WARNINGS assuming the log timestamps are formatted as 
 ```bash
-python -m build
+time_pattern = r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
 ```
 
-This will create .tar.gz and .whl files in the dist/ directory.
-
-## Publishing to PyPI
-
-To publish your package to PyPI, you can use the twine tool:
-
+You can change this format the the source code if you are familiar with python.
+Example Log Path:
 ```bash
-pip install twine
-twine upload dist/*
+FAM_Logs = ~/LOGS/data/devices/FAM/FAM.log
 ```
 
-You'll need to have a PyPI account and have your credentials set up for this.
+## System
+This holds the information for your Linux system and version.
+-TODO: Implent cross platform utility legacy system compatability
 
----
+## VNC
+Your VNC credentials and all of the sessions the engineers may want screenshots of.
+```bash
+host = "hostname.outlook.com"
+password = "Hello_Sky"
+vnc_sessions = 1,2,3,4
+```
+
+## Report
+Fill out contact information and path to report storage
+
