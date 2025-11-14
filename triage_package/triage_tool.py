@@ -88,8 +88,8 @@ class Triage_Tools(object):
 
         #Put main message into the file
         with open(self.report_name, 'w') as report_file:
-            report_file.write("=========Reported Error From User==========")
-            report_file.write(f"{self.message}")
+            report_file.write("=========Reported Error From User==========\n")
+            report_file.write(f"{self.message}\n\n")
 
         print("Configuration loaded successfully.")
 
@@ -258,29 +258,3 @@ class Triage_Tools(object):
 
         return
 
-def main():
-    parser = argparse.ArgumentParser(description="Gecko command-line tool")
-    parser.add_argument(
-        "-m", "--message",
-        type=str,
-        help="Commit message or description"
-    )
-    args = parser.parse_args()
-
-    if args.message:
-        print(f"Message received: {args.message}")  
-        gecko = Triage_Tools(config="triage.ini",message = args.message)
-        gecko.gather_system_info()
-        
-        gecko.gather_logs()
-        gecko._comb_logs()
-        gecko.compress_report()
-        gecko._take_screenshots()
-        #gecko.send_report()
-
-    else:
-        print("No message provided. Use -m 'your message'.")
-
-
-if __name__ == "__main__":
-    main()
