@@ -64,6 +64,7 @@ class Triagetools(object):
         else:
             self.email_alerts = False
         self.r_path = self.config["Report"]["report_path"]
+        self.log_dir = self.config["Logs"]["logs_dir"]
         self.reports_path = f"{self.r_path}/{self.current_utc_date}"
         if not os.path.exists(f"{self.reports_path}"):
             os.mkdir(f"{self.reports_path}")
@@ -187,37 +188,25 @@ class Triagetools(object):
     def gather_logs(self):
         ''' Gathers Logs from all paths to dump into tar comp. '''
         #Iterate through log paths in config file
-        for log in self.config["Logs"]:
-            log_path = self.config["Logs"][log]
-
-            #Check that a log path exist
-            if os.path.exists(log_path):
+        for subdir, dirs, files in os.walk(self.log_dir):
+            for file in files:
+                log_file = os.path.join(subdir, file)
                 #Copy over to logs folder
                 try:
-                    shutil.copy2(log_path,f"{self.reports_path}")
+                    shutil.copy2(log_file,f"{self.reports_path}")
                 except FileNotFoundError:
                     print(f"Error: The file at {log_path} was not found.")
                 except PermissionError:
                     print(f"Error: Permission denied to access the file at {log_path}.")
                 except Exception as e: # pylint: disable = W0718
                     print(f"An unexpected error occurred: {e}")
-            else:
-                print(f"Log path {log_path} does not exist.")
-
 
     def comb_logs(self):
         ''' Comb logs for errors and warnings '''
-
         #Iterate through log paths in config file
-        for log in self.config["Logs"]:
-            path = self.config["Logs"][log]
-            #Edit this to format to LOG structure
-            log_path = f"{path}/{self.utc_date}/"
-            #Put log_path into report file
-            with open(self.report_name, 'a', encoding='utf-8') as file:
-                file.write(f"\n\n====={log_path}=====\n")
-            if os.path.exists(log_path):
-                print(f"Gathering log from: {log_path}")
+        for subdir, dirs, files in os.walk(self.log_dir):
+            for file in files:
+                log_file = os.path.join(subdir, file)
                 try:
                     with open(log_path, 'r', encoding='utf-8') as log_file:
                         #Search for occurances of warnings and errors sequentially
@@ -241,8 +230,6 @@ class Triagetools(object):
                     print(f"Error: Permission denied to access the file at {log_path}.")
                 except Exception as e: # pylint: disable = W0718
                     print(f"An unexpected error occurred: {e}")
-            else:
-                print(f"Log path {log_path} does not exist.")
 
     def compress_report(self):
         '''Compresses report file into a tar.gz format to be emailed'''
