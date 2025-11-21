@@ -206,7 +206,7 @@ class Triagetools(object):
         #Iterate through log paths in config file
         for subdir, dirs, files in os.walk(self.log_dir):
             for file in files:
-                log_file = os.path.join(subdir, file)
+                log_path = os.path.join(subdir, file)
                 try:
                     with open(log_path, 'r', encoding='utf-8') as log_file:
                         #Search for occurances of warnings and errors sequentially
