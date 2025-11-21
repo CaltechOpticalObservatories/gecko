@@ -90,3 +90,6 @@ vnc_sessions = 1,2,3,4
 ## Report
 Fill out contact information and path to report storage
 
+## Executing from anywhere
+Make sure your global python enviornment has all dependices and move executable into bin
+
