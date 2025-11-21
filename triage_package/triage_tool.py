@@ -188,48 +188,51 @@ class Triagetools(object):
     def gather_logs(self):
         ''' Gathers Logs from all paths to dump into tar comp. '''
         #Iterate through log paths in config file
-        for subdir, dirs, files in os.walk(self.log_dir):
+        for subdir, dirs, files in os.walk(self.log_dir): # pylint: disable = W0612
             for file in files:
                 log_file = os.path.join(subdir, file)
                 #Copy over to logs folder
                 try:
                     shutil.copy2(log_file,f"{self.reports_path}")
                 except FileNotFoundError:
-                    print(f"Error: The file at {log_path} was not found.")
+                    print(f"Error: The file at {log_file} was not found.")
                 except PermissionError:
-                    print(f"Error: Permission denied to access the file at {log_path}.")
+                    print(f"Error: Permission denied to access the file at {log_file}.")
                 except Exception as e: # pylint: disable = W0718
                     print(f"An unexpected error occurred: {e}")
 
     def comb_logs(self):
         ''' Comb logs for errors and warnings '''
         #Iterate through log paths in config file
-        for subdir, dirs, files in os.walk(self.log_dir):
+        for subdir, dirs, files in os.walk(self.log_dir): # pylint: disable = W0612
             for file in files:
-                log_path = os.path.join(subdir, file)
-                try:
-                    with open(log_path, 'r', encoding='utf-8') as log_file:
-                        #Search for occurances of warnings and errors sequentially
-                        full_log = log_file.read()
+                if file.lower().endswith(".log"):
+                    log_path = os.path.join(subdir, file)
+                    with open(self.report_name, 'a', encoding='utf-8') as file:
+                        file.write(f"\n\n====={log_path}=====\n")
+                    try:
+                        with open(log_path, 'r', encoding='utf-8') as log_file:
+                            #Search for occurances of warnings and errors sequentially
+                            full_log = log_file.read()
 
-                    #Use Regex
-                    matches = (re.findall(self.regex_pattern, full_log,
-                                                        re.IGNORECASE | re.MULTILINE))
-                    timeframe_matches = [
-                            match for match in matches
-                            if (m := re.match(self.time_pattern, match))
-                            and datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S") >= self.cutoff
-                        ]
+                        #Use Regex
+                        matches = (re.findall(self.regex_pattern, full_log,
+                                                            re.IGNORECASE | re.MULTILINE))
+                        timeframe_matches = [
+                                match for match in matches
+                                if (m := re.match(self.time_pattern, match))
+                                and datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S") >= self.cutoff
+                            ]
 
-                    with open(self.report_name, 'a', encoding='utf-8') as report_file:
-                        for match in timeframe_matches:
-                            report_file.write(f"{match}\n")
-                except FileNotFoundError:
-                    print(f"Error: The file at {log_path} was not found.")
-                except PermissionError:
-                    print(f"Error: Permission denied to access the file at {log_path}.")
-                except Exception as e: # pylint: disable = W0718
-                    print(f"An unexpected error occurred: {e}")
+                        with open(self.report_name, 'a', encoding='utf-8') as report_file:
+                            for match in timeframe_matches:
+                                report_file.write(f"{match}\n")
+                    except FileNotFoundError:
+                        print(f"Error: The file at {log_path} was not found.")
+                    except PermissionError:
+                        print(f"Error: Permission denied to access the file at {log_path}.")
+                    except Exception as e: # pylint: disable = W0718
+                        print(f"An unexpected error occurred: {e}")
 
     def compress_report(self):
         '''Compresses report file into a tar.gz format to be emailed'''
