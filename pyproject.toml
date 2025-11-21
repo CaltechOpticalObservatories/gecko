@@ -17,8 +17,6 @@ authors = [
 dependencies = [
     "pillow",
     "vncdotool",
-    "smtplib",
-    "pyscrenshot",
     "psutil"
     ]
 

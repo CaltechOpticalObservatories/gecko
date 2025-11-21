@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# File: triage_tool/triage_tool.py
-# Author: Elijah Anakalea-Buckley
-# Purpose: Triage aspects of any observatory system or instrument to provide
-#          a quick overview of the system health and status at any point.
-#          Specifically designed for execution at a crash or issue during
-#          observation and potencially adapts to monitoring of system health
-#          over time. 
+''' -*- coding: utf-8 -*-
+ File: triage_tool/triage_tool.py
+ Author: Elijah Anakalea-Buckley
+ Purpose: Triage aspects of any observatory system or instrument to provide
+          a quick overview of the system health and status at any point.
+          Specifically designed for execution at a crash or issue during
+          observation and potencially adapts to monitoring of system health
+          over time.
 
-#NOTE:: pip install the items below;not included in python standard packages
-#       pip install pyscreenshot
-#       pip install psutil
-#       pip install vncdotool
-#       pip install pillow
-#                       -Elijah Anakalea-Buckley
-from triage_package.triage_tool import Triage_Tools
+NOTE:: pip install the items below;not included in python standard packages
+       pip install pyscreenshot
+       pip install psutil
+       pip install vncdotool
+       pip install pillow
+                       -Elijah Anakalea-Buckley
+'''
 import argparse
+from triage_package.triage_tool import Triagetools
 
 #Fill out section then run like a CLI executable!###############
-config_path = "triage.ini"
+CONFIG_PATH = "/home/elijahab/general-dev/gecko/triage_package/triage.ini"
 
 ################################################################
 
 def run_triage():
+    '''Executable file for use on the Command line'''
     parser = argparse.ArgumentParser(description="Gecko command-line tool")
     parser.add_argument(
         "-m", "--message",
@@ -33,14 +35,14 @@ def run_triage():
 
     if args.message:
         print(f"Message received: {args.message}")  
-        gecko = Triage_Tools(config=config_path,message = args.message)
+        gecko = Triagetools(config=CONFIG_PATH,message = args.message)
         gecko.gather_system_info()
-        
+
         gecko.gather_logs()
-        gecko._comb_logs()
+        gecko.comb_logs()
+        gecko.take_screenshots()
         gecko.compress_report()
-        gecko._take_screenshots()
         #gecko.send_report()
-    
+
 if __name__ == "__main__":
     run_triage()
