@@ -21,12 +21,10 @@ import tarfile
 import shutil
 import configparser
 import smtplib
-#import argparse
-#from email.mime.text import MIMEText
 from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
-#import glob
+import glob
 import threading
 import socket
 import psutil
@@ -62,6 +60,7 @@ class Triagetools(object):
         if self.config["Report"]["email_alerts"].lower().strip() == "true":
             self.email_alerts = True
             self.target_email = self.config["Report"]["instrument_master_email"]
+            self.sender_email = self.config["Report"]["sender_email"]
         else:
             self.email_alerts = False
         self.r_path = self.config["Report"]["report_path"]
@@ -282,22 +281,46 @@ class Triagetools(object):
                     file.write(f"\nSource Directory: {i_dir}\n--{e}\n")
 
     def send_report(self):
-        ''' Send the generated report to specified recipients '''
-        #send message using smtplib
-        #format message
+        """Send the generated report to specified recipients."""
+
+        # Create email
         msg = EmailMessage()
-        msg ['Subject'] = f'' #pylint: disable = W1309
-        msg['From'] = ''
-        msg['To'] = self.target_email
+        msg['Subject'] = f'Gecko Report {self.utc_date}'
+        msg['From'] = self.sender_email   # replace with actual sender
+        msg['To'] = self.target_email     # can be comma-separated string or list
 
-        #image_files = glob.glob(os.path.join(self.reports_path,'**', '*.png'), recursive=True)
+        # Email body
+        msg.set_content("Please see attached report images.")
 
-        # TODO: test add attatchment.
-        msg.add_attachment()
-        #for file in image_files:
-        #    with open(file,'rb') as fp:
-        #         img_data = fp.read()
-        #    msg.add_attachment(img_data, maintype='image', subtype='png')
+        #.txt file first
+        with open(self.report_name, 'rb') as f:
+            msg.add_attachment(
+                f.read(),
+                maintype='text',
+                subtype='plain',
+                filename=os.path.basename(self.report_name)
+                )
 
-        sender = smtplib.SMTP('localhost')
-        sender.quit()
+        #tar.gz file next
+        tar_file = f"{self.reports_path}/gecko_{self.utc_date}.tar.gz"
+        with open(tar_file, 'rb') as f:
+            msg.add_attachment(
+                f.read(),
+                maintype='application',
+                subtype='gzip',
+                filename=os.path.basename(tar_file)
+            )
+
+        # Attach PNG images recursively from the reports_path
+        image_files = glob.glob(os.path.join(self.reports_path, '**', '*.png'), recursive=True)
+        for file in image_files:
+            with open(file, 'rb') as fp:
+                img_data = fp.read()
+                filename = os.path.basename(file)
+                msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
+
+        # Send email using local SMTP server
+        with smtplib.SMTP('localhost') as sender:
+            sender.send_message(msg)
+
+        print(f"Report sent to {self.target_email}")
