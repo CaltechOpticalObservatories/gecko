@@ -221,11 +221,15 @@ class Triagetools(object):
                         #Use Regex
                         matches = (re.findall(self.regex_pattern, full_log,
                                                             re.IGNORECASE | re.MULTILINE))
+                        #timeframe_matches = [
+                        #        match for match in matches
+                        #        if (m := re.match(self.time_pattern, match))
+                        #        and datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S") >=
+                        #                                                        self.cutoff]
                         timeframe_matches = [
                                 match for match in matches
                                 if (m := re.match(self.time_pattern, match))
-                                and datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S") >=
-                                                                                self.cutoff]
+                                and datetime.fromisoformat(m.group(1)) >= self.cutoff]
 
                         with open(self.report_name, 'a', encoding='utf-8') as report_file:
                             for match in timeframe_matches:
