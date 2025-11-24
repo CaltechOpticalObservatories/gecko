@@ -43,7 +43,8 @@ class Triagetools(object):
         self.utc_time = str(self.utc_date.time())
         self.cutoff = datetime.now().replace(tzinfo=None) - timedelta(hours=24)
         self.message = message
-        self.time_pattern = r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+        self.time_pattern = r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)"
+
 
         # Load config file
         self.load_config(self.config_file)
@@ -65,6 +66,7 @@ class Triagetools(object):
             self.email_alerts = False
         self.r_path = self.config["Report"]["report_path"]
         self.log_dir = self.config["Logs"]["logs_dir"]
+        self.science_dir = self.config["Logs"]["science_dir"]
         self.reports_path = f"{self.r_path}/{self.current_utc_date}"
         if not os.path.exists(f"{self.reports_path}"):
             os.mkdir(f"{self.reports_path}")
@@ -210,6 +212,7 @@ class Triagetools(object):
                     log_path = os.path.join(subdir, file)
                     with open(self.report_name, 'a', encoding='utf-8') as file:
                         file.write(f"\n\n====={log_path}=====\n")
+                    print(f"Gathering log from: {log_path}")
                     try:
                         with open(log_path, 'r', encoding='utf-8') as log_file:
                             #Search for occurances of warnings and errors sequentially
@@ -221,8 +224,8 @@ class Triagetools(object):
                         timeframe_matches = [
                                 match for match in matches
                                 if (m := re.match(self.time_pattern, match))
-                                and datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S") >= self.cutoff
-                            ]
+                                and datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S") >=
+                                                                                self.cutoff]
 
                         with open(self.report_name, 'a', encoding='utf-8') as report_file:
                             for match in timeframe_matches:
@@ -239,6 +242,37 @@ class Triagetools(object):
         #Tar file and add it to message
         with tarfile.open(f"{self.reports_path}/gecko_{self.utc_date}.tar.gz", "w:gz") as tar:
             tar.add(f"{self.reports_path}", arcname=os.path.basename(f"{self.reports_path}"))
+
+    def grab_science_image(self):
+        '''Grabs most recent science image(s) to include in triage'''
+        #Edit this section to fit instrument data schema
+        image_dirs = [
+            f"{self.science_dir}/acam",
+            f"{self.science_dir}/slicecam",
+            self.science_dir,
+        ]
+        #Iterate through dirs and grab most recent modified file,
+        # which should be the most recent image taken
+        for i_dir in image_dirs:
+            if not os.path.exists(i_dir):
+                with open(self.report_name, 'a', encoding='utf-8') as file:
+                    file.write(f"\nScience Directory does not Exist: {dir}\n")
+            else:
+                files = [
+                os.path.join(i_dir, f)
+                for f in os.listdir(i_dir)
+                if os.path.isfile(os.path.join(i_dir), f)
+                ]
+
+                if not files:
+                    raise FileNotFoundError("No files found in source directory.")
+
+                # Pick newest by modification time
+                newest_file = max(files, key=os.path.getmtime)
+
+                # Copy to destination
+                shutil.copy(newest_file, self.reports_path)
+
 
     def send_report(self):
         ''' Send the generated report to specified recipients '''

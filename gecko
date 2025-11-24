@@ -41,6 +41,7 @@ def run_triage():
         gecko.gather_logs()
         gecko.comb_logs()
         gecko.take_screenshots()
+        gecko.grab_science_image()
         gecko.compress_report()
         #gecko.send_report()
 
