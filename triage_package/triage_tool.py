@@ -279,7 +279,7 @@ class Triagetools(object):
                     shutil.copy(newest_file, self.reports_path)
             except FileNotFoundError  as e:
                 with open(self.report_name, 'a', encoding='utf-8') as file:
-                        file.write(f"\nSource Directory: {i_dir}\n--{e}\n")
+                    file.write(f"\nSource Directory: {i_dir}\n--{e}\n")
 
     def send_report(self):
         ''' Send the generated report to specified recipients '''
