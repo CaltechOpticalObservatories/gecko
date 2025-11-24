@@ -258,25 +258,28 @@ class Triagetools(object):
         #Iterate through dirs and grab most recent modified file,
         # which should be the most recent image taken
         for i_dir in image_dirs:
-            if not os.path.exists(i_dir):
+            try:
+                if not os.path.exists(i_dir):
+                    with open(self.report_name, 'a', encoding='utf-8') as file:
+                        file.write(f"\nScience Directory does not Exist: {dir}\n")
+                else:
+                    files = [
+                    os.path.join(i_dir, f)
+                    for f in os.listdir(i_dir)
+                    if os.path.isfile(os.path.join(i_dir), f)
+                    ]
+
+                    if not files:
+                        raise FileNotFoundError("No files found in source directory.")
+
+                    # Pick newest by modification time
+                    newest_file = max(files, key=os.path.getmtime)
+
+                    # Copy to destination
+                    shutil.copy(newest_file, self.reports_path)
+            except FileNotFoundError  as e:
                 with open(self.report_name, 'a', encoding='utf-8') as file:
-                    file.write(f"\nScience Directory does not Exist: {dir}\n")
-            else:
-                files = [
-                os.path.join(i_dir, f)
-                for f in os.listdir(i_dir)
-                if os.path.isfile(os.path.join(i_dir), f)
-                ]
-
-                if not files:
-                    raise FileNotFoundError("No files found in source directory.")
-
-                # Pick newest by modification time
-                newest_file = max(files, key=os.path.getmtime)
-
-                # Copy to destination
-                shutil.copy(newest_file, self.reports_path)
-
+                        file.write(f"\nSource Directory: {dir}\n--{e}\n")
 
     def send_report(self):
         ''' Send the generated report to specified recipients '''
