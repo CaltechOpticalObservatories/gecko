@@ -61,6 +61,7 @@ class Triagetools(object):
             self.email_alerts = True
             self.target_email = self.config["Report"]["instrument_master_email"]
             self.sender_email = self.config["Report"]["sender_email"]
+            self.sender_password = self.config["Report"]["sender_password"]
         else:
             self.email_alerts = False
         self.r_path = self.config["Report"]["report_path"]
@@ -319,8 +320,13 @@ class Triagetools(object):
                 filename = os.path.basename(file)
                 msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
 
-        # Send email using local SMTP server
-        with smtplib.SMTP('localhost') as sender:
-            sender.send_message(msg)
+        ## Send email using local SMTP server
+        #with smtplib.SMTP('localhost') as sender:
+        #    sender.send_message(msg)
+
+        # Connect to Gmail SMTP server
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(self.sender_email, self.sender_password)  # use an App Password
+            smtp.send_message(msg)
 
         print(f"Report sent to {self.target_email}")
