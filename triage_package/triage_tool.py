@@ -266,7 +266,7 @@ class Triagetools(object):
                     files = [
                     os.path.join(i_dir, f)
                     for f in os.listdir(i_dir)
-                    if os.path.isfile(os.path.join(i_dir), f)
+                    if os.path.isfile(os.path.join(i_dir, f))
                     ]
 
                     if not files:
