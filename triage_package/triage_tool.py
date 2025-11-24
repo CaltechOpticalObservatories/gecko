@@ -325,7 +325,7 @@ class Triagetools(object):
         #    sender.send_message(msg)
 
         # Connect to Gmail SMTP server
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+        with smtplib.SMTP_SSL('smtp.outlook.com', 465) as smtp:
             smtp.login(self.sender_email, self.sender_password)  # use an App Password
             smtp.send_message(msg)
 
