@@ -17,6 +17,7 @@ NOTE:: pip install the items below;not included in python standard packages
                        -Elijah Anakalea-Buckley
 '''
 import os
+import sys
 import tarfile
 import shutil
 import configparser
@@ -33,7 +34,7 @@ from vncdotool import api
 class Triagetools(object):
     """Triage tool for bug catching and error reporting"""
 
-    def __init__(self, config: str, message:str = ""):
+    def __init__(self, config: str, message:str = "", init = False):
         # Grab UTC, and load config file
         self.config_file = config
         self.utc_date = datetime.now(timezone.utc)
@@ -43,27 +44,71 @@ class Triagetools(object):
         self.message = message
         self.time_pattern = r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)"
 
+        # Create a ConfigParser object
+        self.config = configparser.ConfigParser()
 
-        # Load config file
-        self.load_config(self.config_file)
+        # Load config file if called
+        if init is True:
+            self.initialize(self.config_file)
+        else:
+            self.load_config(self.config_file)
+
+    def initialize(self, config):
+        ''' Initialize and configure the application '''
+        if not os.path.exists(config):
+            raise FileNotFoundError(f"Configuration file {config} not found")
+        self.config.read(config)
+
+        #Iterate through prompts and populate ini file
+        for section in self.config.sections():
+            print(f"\n\n======  Initializing Section: {section}  ======")
+            for key, value in self.config[section].items():
+                if key == "initialized":
+                    continue
+                if key == "help_text":
+                    help_text = value.replace("\\n", "\n")
+                    print(help_text)
+                    self.config[section][key] = f"{help_text}\n"
+                    continue
+                # Remove inline comments (anything after '#')
+                clean_value = value.split('#')[0].strip()
+                # Prompt user; show current value if it exists
+                prompt = f"Enter value for '{key}'"
+                if clean_value:
+                    prompt += f" (current: {clean_value})"
+                prompt += ": "
+                user_input = input(prompt).strip()
+
+                # If user presses enter, keep existing value
+                if user_input == "":
+                    user_input = clean_value
+
+                # Save updated value
+                self.config[section][key] = user_input
+
+        #set initialized to true for later execution and write
+        self.config["System"]["initialized"] = "true"
+        with open(self.config_file, "w", encoding="utf-8") as config_file:
+            self.config.write(config_file)
 
     def load_config(self, config):
         ''' Load the configuration file '''
         if not os.path.exists(config):
             raise FileNotFoundError(f"Configuration file {config} not found")
-
-        # Create a ConfigParser object
-        self.config = configparser.ConfigParser()
         self.config.read(config)
 
+        initialized = config.getboolean("System", "initialized")
+
+        if not initialized:
+            print("\nYou have not Initialized this application! Please run: 'gecko -init'\n")
+            sys.exit(0)
+
         #Report Section(report file name and current UTCdate folder)
-        if self.config["Report"]["email_alerts"].lower().strip() == "true":
-            self.email_alerts = True
+        self.email_alerts = config.getboolean("Report", "email_alerts")
+        if self.email_alerts:
             self.target_email = self.config["Report"]["instrument_master_email"]
             self.sender_email = self.config["Report"]["sender_email"]
             self.sender_password = self.config["Report"]["sender_password"]
-        else:
-            self.email_alerts = False
         self.r_path = self.config["Report"]["report_path"]
         self.log_dir = self.config["Logs"]["logs_dir"]
         self.science_dir = self.config["Logs"]["science_dir"]
