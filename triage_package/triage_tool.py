@@ -17,16 +17,15 @@ NOTE:: pip install the items below;not included in python standard packages
                        -Elijah Anakalea-Buckley
 '''
 import os
+import sys
 import tarfile
 import shutil
 import configparser
 import smtplib
-#import argparse
-#from email.mime.text import MIMEText
 from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
-#import glob
+import glob
 import threading
 import socket
 import psutil
@@ -35,7 +34,7 @@ from vncdotool import api
 class Triagetools(object):
     """Triage tool for bug catching and error reporting"""
 
-    def __init__(self, config: str, message:str = ""):
+    def __init__(self, config: str, message:str = "", init = False):
         # Grab UTC, and load config file
         self.config_file = config
         self.utc_date = datetime.now(timezone.utc)
@@ -43,27 +42,76 @@ class Triagetools(object):
         self.utc_time = str(self.utc_date.time())
         self.cutoff = datetime.now().replace(tzinfo=None) - timedelta(hours=24)
         self.message = message
-        self.time_pattern = r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+        self.time_pattern = r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)"
 
-        # Load config file
-        self.load_config(self.config_file)
+        # Create a ConfigParser object
+        self.config = configparser.ConfigParser()
+
+        # Load config file if called
+        if init is True:
+            self.initialize(self.config_file)
+        else:
+            self.load_config(self.config_file)
+
+    def initialize(self, config):
+        ''' Initialize and configure the application '''
+        if not os.path.exists(config):
+            raise FileNotFoundError(f"Configuration file {config} not found")
+        self.config.read(config)
+
+        #Iterate through prompts and populate ini file
+        for section in self.config.sections():
+            print(f"\n\n======  Initializing Section: {section}  ======")
+            for key, value in self.config[section].items():
+                if key == "initialized":
+                    continue
+                if key == "help_text":
+                    help_text = value.replace("\\n", "\n")
+                    print(help_text)
+                    self.config[section][key] = f"{help_text}\n"
+                    continue
+                # Remove inline comments (anything after '#')
+                clean_value = value.split('#')[0].strip()
+                # Prompt user; show current value if it exists
+                prompt = f"Enter value for '{key}'"
+                if clean_value:
+                    prompt += f" (current: {clean_value})"
+                prompt += ": "
+                user_input = input(prompt).strip()
+
+                # If user presses enter, keep existing value
+                if user_input == "":
+                    user_input = clean_value
+
+                # Save updated value
+                self.config[section][key] = user_input
+
+        #set initialized to true for later execution and write
+        self.config["System"]["initialized"] = "true"
+        with open(self.config_file, "w", encoding="utf-8") as config_file:
+            self.config.write(config_file)
 
     def load_config(self, config):
         ''' Load the configuration file '''
         if not os.path.exists(config):
             raise FileNotFoundError(f"Configuration file {config} not found")
-
-        # Create a ConfigParser object
-        self.config = configparser.ConfigParser()
         self.config.read(config)
 
+        initialized = config.getboolean("System", "initialized")
+
+        if not initialized:
+            print("\nYou have not Initialized this application! Please run: 'gecko -init'\n")
+            sys.exit(0)
+
         #Report Section(report file name and current UTCdate folder)
-        if self.config["Report"]["email_alerts"].lower().strip() == "true":
-            self.email_alerts = True
+        self.email_alerts = config.getboolean("Report", "email_alerts")
+        if self.email_alerts:
             self.target_email = self.config["Report"]["instrument_master_email"]
-        else:
-            self.email_alerts = False
+            self.sender_email = self.config["Report"]["sender_email"]
+            self.sender_password = self.config["Report"]["sender_password"]
         self.r_path = self.config["Report"]["report_path"]
+        self.log_dir = self.config["Logs"]["logs_dir"]
+        self.science_dir = self.config["Logs"]["science_dir"]
         self.reports_path = f"{self.r_path}/{self.current_utc_date}"
         if not os.path.exists(f"{self.reports_path}"):
             os.mkdir(f"{self.reports_path}")
@@ -187,62 +235,56 @@ class Triagetools(object):
     def gather_logs(self):
         ''' Gathers Logs from all paths to dump into tar comp. '''
         #Iterate through log paths in config file
-        for log in self.config["Logs"]:
-            log_path = self.config["Logs"][log]
-
-            #Check that a log path exist
-            if os.path.exists(log_path):
+        for subdir, dirs, files in os.walk(self.log_dir): # pylint: disable = W0612
+            for file in files:
+                log_file = os.path.join(subdir, file)
                 #Copy over to logs folder
                 try:
-                    shutil.copy2(log_path,f"{self.reports_path}")
+                    shutil.copy2(log_file,f"{self.reports_path}")
                 except FileNotFoundError:
-                    print(f"Error: The file at {log_path} was not found.")
+                    print(f"Error: The file at {log_file} was not found.")
                 except PermissionError:
-                    print(f"Error: Permission denied to access the file at {log_path}.")
+                    print(f"Error: Permission denied to access the file at {log_file}.")
                 except Exception as e: # pylint: disable = W0718
                     print(f"An unexpected error occurred: {e}")
-            else:
-                print(f"Log path {log_path} does not exist.")
-
 
     def comb_logs(self):
         ''' Comb logs for errors and warnings '''
-
         #Iterate through log paths in config file
-        for log in self.config["Logs"]:
-            path = self.config["Logs"][log]
-            #Edit this to format to LOG structure
-            log_path = f"{path}/{self.utc_date}/"
-            #Put log_path into report file
-            with open(self.report_name, 'a', encoding='utf-8') as file:
-                file.write(f"\n\n====={log_path}=====\n")
-            if os.path.exists(log_path):
-                print(f"Gathering log from: {log_path}")
-                try:
-                    with open(log_path, 'r', encoding='utf-8') as log_file:
-                        #Search for occurances of warnings and errors sequentially
-                        full_log = log_file.read()
+        for subdir, dirs, files in os.walk(self.log_dir): # pylint: disable = W0612
+            for file in files:
+                if file.lower().endswith(".log"):
+                    log_path = os.path.join(subdir, file)
+                    with open(self.report_name, 'a', encoding='utf-8') as file:
+                        file.write(f"\n\n====={log_path}=====\n")
+                    print(f"Gathering log from: {log_path}")
+                    try:
+                        with open(log_path, 'r', encoding='utf-8') as log_file:
+                            #Search for occurances of warnings and errors sequentially
+                            full_log = log_file.read()
 
-                    #Use Regex
-                    matches = (re.findall(self.regex_pattern, full_log,
-                                                        re.IGNORECASE | re.MULTILINE))
-                    timeframe_matches = [
-                            match for match in matches
-                            if (m := re.match(self.time_pattern, match))
-                            and datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S") >= self.cutoff
-                        ]
+                        #Use Regex
+                        matches = (re.findall(self.regex_pattern, full_log,
+                                                            re.IGNORECASE | re.MULTILINE))
+                        #timeframe_matches = [
+                        #        match for match in matches
+                        #        if (m := re.match(self.time_pattern, match))
+                        #        and datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S") >=
+                        #                                                        self.cutoff]
+                        timeframe_matches = [
+                                match for match in matches
+                                if (m := re.match(self.time_pattern, match))
+                                and datetime.fromisoformat(m.group(1)) >= self.cutoff]
 
-                    with open(self.report_name, 'a', encoding='utf-8') as report_file:
-                        for match in timeframe_matches:
-                            report_file.write(f"{match}\n")
-                except FileNotFoundError:
-                    print(f"Error: The file at {log_path} was not found.")
-                except PermissionError:
-                    print(f"Error: Permission denied to access the file at {log_path}.")
-                except Exception as e: # pylint: disable = W0718
-                    print(f"An unexpected error occurred: {e}")
-            else:
-                print(f"Log path {log_path} does not exist.")
+                        with open(self.report_name, 'a', encoding='utf-8') as report_file:
+                            for match in timeframe_matches:
+                                report_file.write(f"{match}\n")
+                    except FileNotFoundError:
+                        print(f"Error: The file at {log_path} was not found.")
+                    except PermissionError:
+                        print(f"Error: Permission denied to access the file at {log_path}.")
+                    except Exception as e: # pylint: disable = W0718
+                        print(f"An unexpected error occurred: {e}")
 
     def compress_report(self):
         '''Compresses report file into a tar.gz format to be emailed'''
@@ -250,23 +292,86 @@ class Triagetools(object):
         with tarfile.open(f"{self.reports_path}/gecko_{self.utc_date}.tar.gz", "w:gz") as tar:
             tar.add(f"{self.reports_path}", arcname=os.path.basename(f"{self.reports_path}"))
 
+    def grab_science_image(self):
+        '''Grabs most recent science image(s) to include in triage'''
+        #Edit this section to fit instrument data schema
+        image_dirs = [
+            f"{self.science_dir}/acam",
+            f"{self.science_dir}/slicecam",
+            self.science_dir,
+        ]
+        #Iterate through dirs and grab most recent modified file,
+        # which should be the most recent image taken
+        for i_dir in image_dirs:
+            try:
+                if not os.path.exists(i_dir):
+                    with open(self.report_name, 'a', encoding='utf-8') as file:
+                        file.write(f"\nScience Directory does not Exist: {dir}\n")
+                else:
+                    files = [
+                    os.path.join(i_dir, f)
+                    for f in os.listdir(i_dir)
+                    if os.path.isfile(os.path.join(i_dir, f))
+                    ]
+
+                    if not files:
+                        raise FileNotFoundError("No files found in source directory.")
+
+                    # Pick newest by modification time
+                    newest_file = max(files, key=os.path.getmtime)
+
+                    # Copy to destination
+                    shutil.copy(newest_file, self.reports_path)
+            except FileNotFoundError  as e:
+                with open(self.report_name, 'a', encoding='utf-8') as file:
+                    file.write(f"\nSource Directory: {i_dir}\n--{e}\n")
+
     def send_report(self):
-        ''' Send the generated report to specified recipients '''
-        #send message using smtplib
-        #format message
+        """Send the generated report to specified recipients."""
+
+        # Create email
         msg = EmailMessage()
-        msg ['Subject'] = f'' #pylint: disable = W1309
-        msg['From'] = ''
-        msg['To'] = self.target_email
+        msg['Subject'] = f'Gecko Report {self.utc_date}'
+        msg['From'] = self.sender_email   # replace with actual sender
+        msg['To'] = self.target_email     # can be comma-separated string or list
 
-        #image_files = glob.glob(os.path.join(self.reports_path,'**', '*.png'), recursive=True)
+        # Email body
+        msg.set_content("Please see attached report images.")
 
-        # TODO: test add attatchment.
-        msg.add_attachment()
-        #for file in image_files:
-        #    with open(file,'rb') as fp:
-        #         img_data = fp.read()
-        #    msg.add_attachment(img_data, maintype='image', subtype='png')
+        #.txt file first
+        with open(self.report_name, 'rb') as f:
+            msg.add_attachment(
+                f.read(),
+                maintype='text',
+                subtype='plain',
+                filename=os.path.basename(self.report_name)
+                )
 
-        sender = smtplib.SMTP('localhost')
-        sender.quit()
+        #tar.gz file next
+        tar_file = f"{self.reports_path}/gecko_{self.utc_date}.tar.gz"
+        with open(tar_file, 'rb') as f:
+            msg.add_attachment(
+                f.read(),
+                maintype='application',
+                subtype='gzip',
+                filename=os.path.basename(tar_file)
+            )
+
+        # Attach PNG images recursively from the reports_path
+        image_files = glob.glob(os.path.join(self.reports_path, '**', '*.png'), recursive=True)
+        for file in image_files:
+            with open(file, 'rb') as fp:
+                img_data = fp.read()
+                filename = os.path.basename(file)
+                msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
+
+        ## Send email using local SMTP server
+        #with smtplib.SMTP('localhost') as sender:
+        #    sender.send_message(msg)
+
+        # Connect to Gmail SMTP server
+        with smtplib.SMTP_SSL('smtp.outlook.com', 465) as smtp:
+            smtp.login(self.sender_email, self.sender_password)  # use an App Password
+            smtp.send_message(msg)
+
+        print(f"Report sent to {self.target_email}")
