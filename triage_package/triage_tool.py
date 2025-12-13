@@ -66,9 +66,8 @@ class Triagetools(object):
                 if key == "initialized":
                     continue
                 if key == "help_text":
-                    help_text = value.replace("\\n", "\n")
-                    print(help_text)
-                    self.config[section][key] = f"{help_text}\n"
+                    print(value.rstrip())
+                    print()  # extra blank line
                     continue
                 # Remove inline comments (anything after '#')
                 clean_value = value.split('#')[0].strip()
@@ -117,6 +116,12 @@ class Triagetools(object):
             os.mkdir(f"{self.reports_path}")
         self.report_name = f"{self.reports_path}/gecko_report_{self.utc_time}.txt"
         self.regex_pattern = r"^.*error.*$|^.*warning.*$"
+        log_time_pattern = self.config["Reports"]["time_pattern"]
+        try:
+            # document the regex
+            self.time_pattern = re.compile(log_time_pattern)
+        except re.error as e:
+            raise ValueError(f"Invalid regex in config: {e}")
 
         #Machine Section
         self.cpu_threshold = self.config["Machine"]["cpu_threshold"]
@@ -157,9 +162,11 @@ class Triagetools(object):
         temps = psutil.sensors_temperatures() #Dict
         # Memory
         virtual_memory = psutil.virtual_memory() #<class 'psutil._pslinux.svmem'>
+        system_str = f"{self.os} :: {self.os_version}"
 
         with open(self.report_name, 'a', encoding='utf-8') as file:
             file.write("\n\n=====System Information=====\n")
+            file.write(f'{system_str}\n')
             file.write(f'Logical CPUs: {cpu_count_logical}\n')
             file.write(f'Physical CPUs: {cpu_count_physical}\n')
             file.write('Detailed CPU Usage:\n')
