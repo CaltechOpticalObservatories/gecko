@@ -105,7 +105,7 @@ class Triagetools(object):
         #Report Section(report file name and current UTCdate folder)
         self.email_alerts = config.getboolean("Report", "email_alerts")
         if self.email_alerts:
-            self.target_email = self.config["Report"]["instrument_master_email"]
+            self.target_email = self.config["Report"]["recipient_email"]
             self.sender_email = self.config["Report"]["sender_email"]
             self.sender_password = self.config["Report"]["sender_password"]
         self.r_path = self.config["Report"]["report_path"]
