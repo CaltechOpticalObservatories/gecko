@@ -96,14 +96,14 @@ class Triagetools(object):
             raise FileNotFoundError(f"Configuration file {config} not found")
         self.config.read(config)
 
-        initialized = config.getboolean("System", "initialized")
+        initialized = self.config.getboolean("System", "initialized")
 
         if not initialized:
             print("\nYou have not Initialized this application! Please run: 'gecko -init'\n")
             sys.exit(0)
 
         #Report Section(report file name and current UTCdate folder)
-        self.email_alerts = config.getboolean("Report", "email_alerts")
+        self.email_alerts = self.config.getboolean("Report", "email_alerts")
         if self.email_alerts:
             self.target_email = self.config["Report"]["recipient_email"]
             self.sender_email = self.config["Report"]["sender_email"]
@@ -116,7 +116,7 @@ class Triagetools(object):
             os.mkdir(f"{self.reports_path}")
         self.report_name = f"{self.reports_path}/gecko_report_{self.utc_time}.txt"
         self.regex_pattern = r"^.*error.*$|^.*warning.*$"
-        log_time_pattern = self.config["Reports"]["time_pattern"]
+        log_time_pattern = self.config["Report"]["time_pattern"]
         try:
             # document the regex
             self.time_pattern = re.compile(log_time_pattern)
