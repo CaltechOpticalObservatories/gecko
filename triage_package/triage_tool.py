@@ -18,10 +18,12 @@ NOTE:: pip install the items below;not included in python standard packages
 '''
 import os
 import sys
+import subprocess
 import tarfile
 import shutil
 import configparser
 import smtplib
+from pathlib import Path
 from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
@@ -121,7 +123,7 @@ class Triagetools(object):
             # document the regex
             self.time_pattern = re.compile(log_time_pattern)
         except re.error as e:
-            raise ValueError(f"Invalid regex in config: {e}")
+            raise ValueError(f"Invalid regex in config: {e}")#pylint: disable=W0707
 
         #Machine Section
         self.cpu_threshold = self.config["Machine"]["cpu_threshold"]
@@ -132,10 +134,10 @@ class Triagetools(object):
         self.os_version = self.config["System"]["os_version"]
 
         #VNC information
-        self.host = self.config["VNC"]["host"]
-        self.password = self.config["VNC"]["password"]
-        temp_sessions = self.config["VNC"]["vnc_sessions"]
-        self.vnc_sessions = [int(num.strip()) for num in temp_sessions.split(',')]
+        #self.host = self.config["VNC"]["host"]
+        #self.password = self.config["VNC"]["password"]
+        #temp_sessions = self.config["VNC"]["vnc_sessions"]
+        #self.vnc_sessions = [int(num.strip()) for num in temp_sessions.split(',')]
 
         #Put main message into the file
         with open(self.report_name, 'w', encoding='utf-8') as report_file:
@@ -186,58 +188,54 @@ class Triagetools(object):
 
     def take_screenshots(self):
         ''' Take screenshots of the system state on all possible monitors '''
-        # Ensure report path ends with slash
-        if not self.reports_path.endswith("/"):
-            self.reports_path += "/"
+        sessions = self.find_displays()
 
-        for session in self.vnc_sessions:
-            # Format session number (e.g., '1' → '01')
-            session_str = f"{int(session):02d}"
+        if not sessions:
+            print("no X11 diaplays found")
+            return
 
-            screenshot_name = f"gecko_screenshot_{session_str}_{self.utc_time}.png"
-            screenshot_path = os.path.join(f"{self.reports_path}", screenshot_name)
+        print(f"Found Sessions: {', '.join(sessions)}")
 
-            success, err = self._capture_with_timeout(
-                host=self.host,
-                session_str=session_str,
-                password=self.password,
-                screenshot_path=screenshot_path,
-                timeout=3,
+        for s in sessions:
+            try:
+                out = self.capture_session(s)
+                print(f"Captured Session: {s} -> {out}")
+            except Exception as e:
+                print(f"Failed to capture -> {s}: {e}")
+
+    def capture_session(self, session):
+        '''Captures a specific session through x11'''
+
+        screenshot_name = f"gecko_screenshot_{session}_{self.utc_time}.png"
+        screenshot_path = os.path.join(f"{self.reports_path}", screenshot_name)
+
+        xwd = subprocess.Popen(
+            ["xwd", "-root", "-silent", "-display", session],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             )
 
-            if success:
-                print(f"[INFO] Saved screenshot: {screenshot_path}")
-            else:
-                print(f"[ERROR] Screenshot failed for session {session_str}: {err}")
+        convert = subprocess.Popen(
+            ["convert", "xwd:-", str(screenshot_path)],
+            stdin=xwd.stdout,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            )
 
-    def _capture_with_timeout(self, host, session_str, password, screenshot_path, timeout=3):
-        '''Function for timeout or access limited attempts to take VNC screenshots(3)'''
-        result = {}
+        xwd.stdout.close()
+        convert.wait()
 
-        def _worker():
-            try:
-                with api.connect(f"{host}::59{session_str}", password=password) as vnc_client:
-                    vnc_client.captureScreen(screenshot_path)
-                result["ok"] = True
-            except (ConnectionRefusedError,
-                    ConnectionResetError,
-                    socket.timeout,
-                    socket.gaierror,
-                    OSError) as e:
-                result["error"] = f"Network error: {e}"
-            except Exception as e: #pylint: disable = W0718
-                result["error"] = str(e)
+        return screenshot_path
 
-        t = threading.Thread(target=_worker)
-        t.daemon = True
-        t.start()
-        t.join(timeout)
-
-        if t.is_alive():
-            return False, f"Timed out after {timeout}s"
-        if "error" in result:
-            return False, result["error"]
-        return True, None
+    def find_displays(self):
+        """
+         Find active X11 displays by checking /tmp/.X11-unix/X*
+        """
+        displays = []
+        for path in glob.glob("/tmp/.X11-unix/X*"):
+            display = ":" + os.path.basename(path)[1:]
+            displays.append(display)
+        return sorted(displays, key=lambda d: int(d[1:]))
 
     def gather_logs(self):
         ''' Gathers Logs from all paths to dump into tar comp. '''

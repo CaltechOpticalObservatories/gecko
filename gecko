@@ -36,7 +36,7 @@ def run_triage():
 
             You can either:
             1) Initialize the application (--initialize) to configure settings.
-            2) Run a triage report (--message "description") to gather logs and send a report.
+            2) Run a triage report (--message "description" -user "user") to gather logs and send a report.
                     """,
                     formatter_class=argparse.RawTextHelpFormatter
                 )
@@ -57,6 +57,12 @@ def run_triage():
              "Example: --message 'GPU overheating issue observed today'"
     )
 
+    group.add_argument(
+        "-u", "-user",
+        action="store_true",
+        help="Input username to better track issues"
+    )
+
     args = parser.parse_args()
 
     if args.initialize:
@@ -64,9 +70,10 @@ def run_triage():
         print('\nInitialization complete!')
         print('You can now run the GUI or use:\n  gecko -m "your issue message" \n')
 
-    elif args.message:
-        gecko = Triagetools(config=CONFIG_PATH, message=args.message)
-        print(f"Running triage workflow for message: {args.message}\n")
+    elif args.message and args.user:
+        user_message = f"USER: {args.user}\nMESSAGE: {args.message}"
+        gecko = Triagetools(config=CONFIG_PATH, message=user_message)
+        print(f"Running triage workflow for user: {args.user}\nwith the message: {args.message}\n")
         gecko.gather_system_info()
         gecko.gather_logs()
         gecko.comb_logs()
@@ -77,6 +84,11 @@ def run_triage():
         #if gecko.email_alerts:
         #    gecko.send_report()
         print("\nTriage workflow complete!")
+
+    else:
+        print("\n\nYou need to include a user and a message in your report.")
+        print("example: ./gecko -u 'Steven.B' -m 'One of the channels looked weird "
+        "and I was unable to get any more data'")
 
 
 if __name__ == "__main__":
