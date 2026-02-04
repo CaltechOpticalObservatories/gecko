@@ -19,30 +19,77 @@ import argparse
 from triage_package.triage_tool import Triagetools
 
 #Fill out section then run like a CLI executable!###############
-CONFIG_PATH = "/home/elijahab/general-dev/gecko/triage_package/triage.ini"
+CONFIG_PATH = "triage_package/triage.ini"
 
 ################################################################
 
 def run_triage():
     '''Executable file for use on the Command line'''
     parser = argparse.ArgumentParser(description="Gecko command-line tool")
-    parser.add_argument(
+
+    parser = argparse.ArgumentParser(
+        description="""
+            Gecko Triage Tool
+
+            A command-line utility to collect system and application logs, take screenshots, 
+            grab science images, and optionally send a compressed report via email.
+
+            You can either:
+            1) Initialize the application (--initialize) to configure settings.
+            2) Run a triage report (--message "description" -user "user") to gather logs and send a report.
+                    """,
+                    formatter_class=argparse.RawTextHelpFormatter
+                )
+
+    # Mutually exclusive: either initialize or provide a message
+    group = parser.add_mutually_exclusive_group(required=True)
+
+    group.add_argument(
+        "-init","--initialize",
+        action="store_true",
+        help="Initialize the application"
+    )
+
+    group.add_argument(
         "-m", "--message",
         type=str,
-        help="Commit message or description"
+        help="Run the triage workflow with a message describing the issue. "
+             "Example: --message 'GPU overheating issue observed today'"
     )
+
+    group.add_argument(
+        "-u", "-user",
+        action="store_true",
+        help="Input username to better track issues"
+    )
+
     args = parser.parse_args()
 
-    if args.message:
-        print(f"Message received: {args.message}")  
-        gecko = Triagetools(config=CONFIG_PATH,message = args.message)
-        gecko.gather_system_info()
+    if args.initialize:
+        gecko = Triagetools(config=CONFIG_PATH, init=True)
+        print('\nInitialization complete!')
+        print('You can now run the GUI or use:\n  gecko -m "your issue message" \n')
 
+    elif args.message and args.user:
+        user_message = f"USER: {args.user}\nMESSAGE: {args.message}"
+        gecko = Triagetools(config=CONFIG_PATH, message=user_message)
+        print(f"Running triage workflow for user: {args.user}\nwith the message: {args.message}\n")
+        gecko.gather_system_info()
         gecko.gather_logs()
         gecko.comb_logs()
         gecko.take_screenshots()
+        gecko.grab_science_image()
         gecko.compress_report()
-        #gecko.send_report()
+
+        #if gecko.email_alerts:
+        #    gecko.send_report()
+        print("\nTriage workflow complete!")
+
+    else:
+        print("\n\nYou need to include a user and a message in your report.")
+        print("example: ./gecko -u 'Steven.B' -m 'One of the channels looked weird "
+        "and I was unable to get any more data'")
+
 
 if __name__ == "__main__":
     run_triage()

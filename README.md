@@ -61,35 +61,36 @@ To install any optional dependencies, such as development dependencies, use:
 pip install -e .[dev]
 ```
 
+## Making the executable(optional)
+
+Run this in your terminal to create the gecko executable:
+
+```bash
+cd gecko
+chmod +x gecko
+```
+
 ### Filling Out Config File
 
-## Logs
-Logs will have the path to any and all logs you would like to comb upon execution. This includes the system logs on more . This tool with comb the last 24 hours for ERRORS or WARNINGS assuming the log timestamps are formatted as 
+You can run the command below and you will be prompted with questions to fill out the config file. Read promps and answer accordingly:
+
 ```bash
-time_pattern = r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+python3 gecko -init
+(or ./gecko -init)
 ```
 
-You can change this format the the source code if you are familiar with python.
-Example Log Path:
+### Make Executable avaiable anywhere in the system
+
+Symlink the executable file to bin:
+
 ```bash
-FAM_Logs = ~/LOGS/data/devices/FAM/FAM.log
+sudo ln -s /path/to/repo/Gecko/gecko /usr/local/bin/gecko
 ```
 
-## System
-This holds the information for your Linux system and version.
--TODO: Implent cross platform utility legacy system compatability
+### Generate a report
 
-## VNC
-Your VNC credentials and all of the sessions the engineers may want screenshots of.
+You can now generate gecko reports from any terminal on the machine! (assuming python is available globally)
+
 ```bash
-host = "hostname.outlook.com"
-password = "Hello_Sky"
-vnc_sessions = 1,2,3,4
+./gecko -m "<insert description of bug or instrument failure here>"
 ```
-
-## Report
-Fill out contact information and path to report storage
-
-## Executing from anywhere
-Make sure your global python enviornment has all dependices and move executable into bin
-
