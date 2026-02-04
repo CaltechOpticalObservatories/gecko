@@ -23,15 +23,14 @@ import tarfile
 import shutil
 import configparser
 import smtplib
-from pathlib import Path
 from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
 import glob
-import threading
-import socket
+import threading #pylint: disable=W0611
+import socket #pylint: disable=W0611
 import psutil
-from vncdotool import api
+from vncdotool import api #pylint: disable=W0611
 
 class Triagetools(object):
     """Triage tool for bug catching and error reporting"""
@@ -200,7 +199,7 @@ class Triagetools(object):
             try:
                 out = self.capture_session(s)
                 print(f"Captured Session: {s} -> {out}")
-            except Exception as e:
+            except Exception as e: #pylint: disable=W0718
                 print(f"Failed to capture -> {s}: {e}")
 
     def capture_session(self, session):

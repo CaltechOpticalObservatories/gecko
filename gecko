@@ -42,23 +42,23 @@ def run_triage():
                 )
 
     # Mutually exclusive: either initialize or provide a message
-    group = parser.add_mutually_exclusive_group(required=True)
+    #group = parser.add_mutually_exclusive_group(required=True)
 
-    group.add_argument(
+    parser.add_argument(
         "-init","--initialize",
         action="store_true",
         help="Initialize the application"
     )
 
-    group.add_argument(
+    parser.add_argument(
         "-m", "--message",
         type=str,
         help="Run the triage workflow with a message describing the issue. "
              "Example: --message 'GPU overheating issue observed today'"
     )
 
-    group.add_argument(
-        "-u", "-user",
+    parser.add_argument(
+        "-u", "--user",
         type=str,
         help="Input username to better track issues"
     )
@@ -66,24 +66,27 @@ def run_triage():
     args = parser.parse_args()
 
     if args.initialize:
-        gecko = Triagetools(config=CONFIG_PATH, init=True)
-        print('\nInitialization complete!')
-        print('You can now run the GUI or use:\n  gecko -m "your issue message" \n')
+        if not args.message and not args.user:
+            gecko = Triagetools(config=CONFIG_PATH, init=True)
+            print('\nInitialization complete!')
+            print('You can now run the GUI or use:\n  gecko -m "your issue message" \n')
 
     elif args.message and args.user:
-        user_message = f"USER: {args.user}\nMESSAGE: {args.message}"
-        gecko = Triagetools(config=CONFIG_PATH, message=user_message)
-        print(f"Running triage workflow for user: {args.user}\nwith the message: {args.message}\n")
-        gecko.gather_system_info()
-        gecko.gather_logs()
-        gecko.comb_logs()
-        gecko.take_screenshots()
-        gecko.grab_science_image()
-        gecko.compress_report()
+        if not args.initialize:
+            user_message = f"USER: {args.user}\nMESSAGE: {args.message}"
+            gecko = Triagetools(config=CONFIG_PATH, message=user_message)
+            print(f"Running triage workflow for user: {args.user}\n"
+                  "with the message: {args.message}\n")
+            gecko.gather_system_info()
+            gecko.gather_logs()
+            gecko.comb_logs()
+            gecko.take_screenshots()
+            gecko.grab_science_image()
+            gecko.compress_report()
 
         #if gecko.email_alerts:
         #    gecko.send_report()
-        print("\nTriage workflow complete!")
+            print("\nTriage workflow complete!")
 
     else:
         print("\n\nYou need to include a user and a message in your report.")
