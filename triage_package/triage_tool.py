@@ -22,7 +22,7 @@ import subprocess
 import tarfile
 import shutil
 import configparser
-import smtplib
+#import smtplib
 from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
@@ -363,19 +363,39 @@ class Triagetools(object):
 
         # Attach PNG images recursively from the reports_path
         image_files = glob.glob(os.path.join(self.reports_path, '**', '*.png'), recursive=True)
-        for file in image_files:
-            with open(file, 'rb') as fp:
-                img_data = fp.read()
-                filename = os.path.basename(file)
-                msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
+        #for file in image_files:
+        #    with open(file, 'rb') as fp:
+        #        img_data = fp.read()
+        #        filename = os.path.basename(file)
+        #        msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
 
         ## Send email using local SMTP server
         #with smtplib.SMTP('localhost') as sender:
         #    sender.send_message(msg)
 
         # Connect to Gmail SMTP server
-        with smtplib.SMTP_SSL('smtp.outlook.com', 465) as smtp:
-            smtp.login(self.sender_email, self.sender_password)  # use an App Password
-            smtp.send_message(msg)
+        #with smtplib.SMTP_SSL('smtp.outlook.com', 465) as smtp:
+        #    smtp.login(self.sender_email, self.sender_password)  # use an App Password
+        #    smtp.send_message(msg)
+        #print(f"Report sent to {self.target_email}")
 
-        print(f"Report sent to {self.target_email}")
+        for file in image_files:
+            with open(file, "rb") as fp:
+                msg.add_attachment(
+                    fp.read(),
+                    maintype="image",
+                    subtype="png",
+                    filename=os.path.basename(file)
+                )
+
+        # Send using local sendmail instead of SMTP
+        try:
+            subprocess.run(
+                ["/usr/sbin/sendmail", "-t", "-oi"],
+                input=msg.as_bytes(),
+                check=True
+            )
+            print(f"Report sent to {self.target_email}")
+
+        except Exception as e: #pylint: disable=W0718
+            print("Failed to send report:", e)
