@@ -107,8 +107,8 @@ class Triagetools(object):
         self.email_alerts = self.config.getboolean("Report", "email_alerts")
         if self.email_alerts:
             self.target_email = self.config["Report"]["recipient_email"]
-            self.sender_email = self.config["Report"]["sender_email"]
-            self.sender_password = self.config["Report"]["sender_password"]
+            #self.sender_email = self.config["Report"]["sender_email"]
+            #self.sender_password = self.config["Report"]["sender_password"]
         self.r_path = self.config["Report"]["report_path"]
         self.log_dir = self.config["Logs"]["logs_dir"]
         self.science_dir = self.config["Logs"]["science_dir"]
