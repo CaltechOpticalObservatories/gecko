@@ -115,6 +115,8 @@ python3 gecko -init
 (or ./gecko -init)
 ```
 
+[Initialization Guide](INIT_GUIDE.md)
+
 ### Make Executable avaiable anywhere in the system
 
 Symlink the executable file to bin:
