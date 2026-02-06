@@ -75,8 +75,7 @@ def run_triage():
         if not args.initialize:
             user_message = f"USER: {args.user}\nMESSAGE: {args.message}"
             gecko = Triagetools(config=CONFIG_PATH, message=user_message)
-            print(f"Running triage workflow for user: {args.user}\n"
-                  "with the message: {args.message}\n")
+            print(f"Running triage workflow for user: {args.user}\nwith the message: {args.message}\n")
             gecko.gather_system_info()
             gecko.gather_logs()
             gecko.comb_logs()
@@ -84,14 +83,14 @@ def run_triage():
             gecko.grab_science_image()
             gecko.compress_report()
 
-        #if gecko.email_alerts:
-        #    gecko.send_report()
+        if gecko.email_alerts:
+            gecko.send_report()
             print("\nTriage workflow complete!")
 
     else:
         print("\n\nYou need to include a user and a message in your report.")
-        print("example: ./gecko -u 'Steven.B' -m 'One of the channels looked weird "
-        "and I was unable to get any more data'")
+        print("example: \n./gecko -u 'Steven.B' -m 'One of the channels looked weird "
+        "and I was unable to get any more data'\n\n")
 
 
 if __name__ == "__main__":
