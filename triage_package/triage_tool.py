@@ -22,7 +22,8 @@ import subprocess
 import tarfile
 import shutil
 import configparser
-#import smtplib
+import smtplib
+from pathlib import Path
 from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
@@ -44,6 +45,7 @@ class Triagetools(object):
         self.cutoff = datetime.now().replace(tzinfo=None) - timedelta(hours=24)
         self.message = message
         self.time_pattern = r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)"
+        self.tar_filename = ""
 
         # Create a ConfigParser object
         self.config = configparser.ConfigParser()
@@ -293,8 +295,24 @@ class Triagetools(object):
     def compress_report(self):
         '''Compresses report file into a tar.gz format to be emailed'''
         #Tar file and add it to message
-        with tarfile.open(f"{self.reports_path}/gecko_{self.utc_date}.tar.gz", "w:gz") as tar:
-            tar.add(f"{self.reports_path}", arcname=os.path.basename(f"{self.reports_path}"))
+        #with tarfile.open(f"{self.reports_path}/gecko_{self.utc_date}.tar.gz", "w:gz") as tar:
+        #    tar.add(f"{self.reports_path}", arcname=os.path.basename(f"{self.reports_path}"))
+
+        filename = f"{self.reports_path}/gecko_{self.utc_date}"
+        filename = filename.replace(" ", "_").replace('+','')
+        self.tar_filename = filename.replace(':', '').replace('.', '_') + ".tar.gz"
+        with tarfile.open(self.tar_filename, "w:gz") as tar:
+            for root, dirs, files in os.walk(self.reports_path):
+                for file in files:
+
+                    # Only include files containing utc_time
+                    if self.utc_time in file or ".log" in file:
+                        full_path = os.path.join(root, file)
+
+                        # Keep relative structure inside tar
+                        arcname = os.path.relpath(full_path, self.reports_path)
+
+                        tar.add(full_path, arcname=arcname)
 
     def grab_science_image(self):
         '''Grabs most recent science image(s) to include in triage'''
@@ -352,17 +370,16 @@ class Triagetools(object):
                 )
 
         #tar.gz file next
-        tar_file = f"{self.reports_path}/gecko_{self.utc_date}.tar.gz"
-        with open(tar_file, 'rb') as f:
+        with open(self.tar_filename, 'rb') as f:
             msg.add_attachment(
                 f.read(),
                 maintype='application',
                 subtype='gzip',
-                filename=os.path.basename(tar_file)
+                filename=os.path.basename(self.tar_filename)
             )
 
         # Attach PNG images recursively from the reports_path
-        image_files = glob.glob(os.path.join(self.reports_path, '**', '*.png'), recursive=True)
+        image_files = glob.glob(os.path.join(self.reports_path, '**', f'*{self.utc_time}.png'), recursive=True)
         #for file in image_files:
         #    with open(file, 'rb') as fp:
         #        img_data = fp.read()
