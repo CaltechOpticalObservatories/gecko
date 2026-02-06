@@ -35,9 +35,9 @@ Once initialized, generating a triage report is as simple as:
 
 ```bash
 ./gecko -u "your.name" -m "Description of the issue"
-'''
+```
 
-### Table of Contents
+## Table of Contents
 
 1. Installation
 2. Setting Up Your Package
