@@ -23,8 +23,7 @@ Each section will include a block of text with example inputs to simplify the co
 Important Sections
 ------------------
 
-Primary Section
-^^^^^^^^^^^^^^^
+***Primary Sections***
 
 Boolean Options::
 
