@@ -36,7 +36,8 @@ Once initialized, generating a triage report is as simple as:
 ```bash
 ./gecko -u "your.name" -m "Description of the issue"
 '''
-## Table of Contents
+
+### Table of Contents
 
 1. Installation
 2. Setting Up Your Package
@@ -44,7 +45,7 @@ Once initialized, generating a triage report is as simple as:
 4. Building Your Package
 5. Publishing to PyPI
 
-## Installation
+### Installation
 
 To install the package in editable mode (ideal for development), follow these steps:
 
