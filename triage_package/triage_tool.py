@@ -109,7 +109,7 @@ class Triagetools(object):
         self.email_alerts = self.config.getboolean("Report", "email_alerts")
         if self.email_alerts:
             self.target_email = self.config["Report"]["recipient_email"]
-            #self.sender_email = self.config["Report"]["sender_email"]
+            self.machine_name = self.config["Report"]["machine_name"]
             #self.sender_password = self.config["Report"]["sender_password"]
         self.r_path = self.config["Report"]["report_path"]
         self.log_dir = self.config["Logs"]["logs_dir"]
@@ -354,11 +354,12 @@ class Triagetools(object):
         # Create email
         msg = EmailMessage()
         msg['Subject'] = f'Gecko Report {self.utc_date}'
-        msg['From'] = self.sender_email   # replace with actual sender
+        msg['From'] = self.machine_name   # replace with actual sender
         msg['To'] = self.target_email     # can be comma-separated string or list
 
         # Email body
-        msg.set_content("Please see attached report images.")
+        body = f"\n{self.message}\n\n Unzip tar file to see logs, pngs, etc\n"
+        msg.set_content(body)
 
         #.txt file first
         with open(self.report_name, 'rb') as f:
@@ -379,7 +380,7 @@ class Triagetools(object):
             )
 
         # Attach PNG images recursively from the reports_path
-        image_files = glob.glob(os.path.join(self.reports_path, '**', f'*{self.utc_time}.png'), recursive=True)
+        #image_files = glob.glob(os.path.join(self.reports_path, '**', f'*{self.utc_time}.png'), recursive=True)
         #for file in image_files:
         #    with open(file, 'rb') as fp:
         #        img_data = fp.read()
@@ -396,14 +397,14 @@ class Triagetools(object):
         #    smtp.send_message(msg)
         #print(f"Report sent to {self.target_email}")
 
-        for file in image_files:
-            with open(file, "rb") as fp:
-                msg.add_attachment(
-                    fp.read(),
-                    maintype="image",
-                    subtype="png",
-                    filename=os.path.basename(file)
-                )
+        #for file in image_files:
+        #    with open(file, "rb") as fp:
+        #        msg.add_attachment(
+        #            fp.read(),
+        #            maintype="image",
+        #            subtype="png",
+        #            filename=os.path.basename(file)
+        #        )
 
         # Send using local sendmail instead of SMTP
         try:
