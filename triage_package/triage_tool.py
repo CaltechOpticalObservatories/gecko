@@ -23,6 +23,7 @@ import tarfile
 import shutil
 import configparser
 import smtplib
+from pathlib import Path
 from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
@@ -44,6 +45,7 @@ class Triagetools(object):
         self.cutoff = datetime.now().replace(tzinfo=None) - timedelta(hours=24)
         self.message = message
         self.time_pattern = r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)"
+        self.tar_filename = ""
 
         # Create a ConfigParser object
         self.config = configparser.ConfigParser()
@@ -107,8 +109,8 @@ class Triagetools(object):
         self.email_alerts = self.config.getboolean("Report", "email_alerts")
         if self.email_alerts:
             self.target_email = self.config["Report"]["recipient_email"]
-            self.sender_email = self.config["Report"]["sender_email"]
-            self.sender_password = self.config["Report"]["sender_password"]
+            self.machine_name = self.config["Report"]["machine_name"]
+            #self.sender_password = self.config["Report"]["sender_password"]
         self.r_path = self.config["Report"]["report_path"]
         self.log_dir = self.config["Logs"]["logs_dir"]
         self.science_dir = self.config["Logs"]["science_dir"]
@@ -293,8 +295,24 @@ class Triagetools(object):
     def compress_report(self):
         '''Compresses report file into a tar.gz format to be emailed'''
         #Tar file and add it to message
-        with tarfile.open(f"{self.reports_path}/gecko_{self.utc_date}.tar.gz", "w:gz") as tar:
-            tar.add(f"{self.reports_path}", arcname=os.path.basename(f"{self.reports_path}"))
+        #with tarfile.open(f"{self.reports_path}/gecko_{self.utc_date}.tar.gz", "w:gz") as tar:
+        #    tar.add(f"{self.reports_path}", arcname=os.path.basename(f"{self.reports_path}"))
+
+        filename = f"{self.reports_path}/gecko_{self.utc_date}"
+        filename = filename.replace(" ", "_").replace('+','')
+        self.tar_filename = filename.replace(':', '').replace('.', '_') + ".tar.gz"
+        with tarfile.open(self.tar_filename, "w:gz") as tar:
+            for root, dirs, files in os.walk(self.reports_path):
+                for file in files:
+
+                    # Only include files containing utc_time
+                    if self.utc_time in file or ".log" in file:
+                        full_path = os.path.join(root, file)
+
+                        # Keep relative structure inside tar
+                        arcname = os.path.relpath(full_path, self.reports_path)
+
+                        tar.add(full_path, arcname=arcname)
 
     def grab_science_image(self):
         '''Grabs most recent science image(s) to include in triage'''
@@ -336,11 +354,12 @@ class Triagetools(object):
         # Create email
         msg = EmailMessage()
         msg['Subject'] = f'Gecko Report {self.utc_date}'
-        msg['From'] = self.sender_email   # replace with actual sender
+        msg['From'] = self.machine_name   # replace with actual sender
         msg['To'] = self.target_email     # can be comma-separated string or list
 
         # Email body
-        msg.set_content("Please see attached report images.")
+        body = f"\n{self.message}\n\n Unzip tar file to see logs, pngs, etc\n"
+        msg.set_content(body)
 
         #.txt file first
         with open(self.report_name, 'rb') as f:
@@ -352,30 +371,49 @@ class Triagetools(object):
                 )
 
         #tar.gz file next
-        tar_file = f"{self.reports_path}/gecko_{self.utc_date}.tar.gz"
-        with open(tar_file, 'rb') as f:
+        with open(self.tar_filename, 'rb') as f:
             msg.add_attachment(
                 f.read(),
                 maintype='application',
                 subtype='gzip',
-                filename=os.path.basename(tar_file)
+                filename=os.path.basename(self.tar_filename)
             )
 
         # Attach PNG images recursively from the reports_path
-        image_files = glob.glob(os.path.join(self.reports_path, '**', '*.png'), recursive=True)
-        for file in image_files:
-            with open(file, 'rb') as fp:
-                img_data = fp.read()
-                filename = os.path.basename(file)
-                msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
+        #image_files = glob.glob(os.path.join(self.reports_path, '**', f'*{self.utc_time}.png'), recursive=True)
+        #for file in image_files:
+        #    with open(file, 'rb') as fp:
+        #        img_data = fp.read()
+        #        filename = os.path.basename(file)
+        #        msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
 
         ## Send email using local SMTP server
         #with smtplib.SMTP('localhost') as sender:
         #    sender.send_message(msg)
 
         # Connect to Gmail SMTP server
-        with smtplib.SMTP_SSL('smtp.outlook.com', 465) as smtp:
-            smtp.login(self.sender_email, self.sender_password)  # use an App Password
-            smtp.send_message(msg)
+        #with smtplib.SMTP_SSL('smtp.outlook.com', 465) as smtp:
+        #    smtp.login(self.sender_email, self.sender_password)  # use an App Password
+        #    smtp.send_message(msg)
+        #print(f"Report sent to {self.target_email}")
 
-        print(f"Report sent to {self.target_email}")
+        #for file in image_files:
+        #    with open(file, "rb") as fp:
+        #        msg.add_attachment(
+        #            fp.read(),
+        #            maintype="image",
+        #            subtype="png",
+        #            filename=os.path.basename(file)
+        #        )
+
+        # Send using local sendmail instead of SMTP
+        try:
+            subprocess.run(
+                ["/usr/sbin/sendmail", "-t", "-oi"],
+                input=msg.as_bytes(),
+                check=True
+            )
+            print(f"Report sent to {self.target_email}")
+
+        except Exception as e: #pylint: disable=W0718
+            print("Failed to send report:", e)
