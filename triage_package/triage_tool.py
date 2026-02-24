@@ -19,19 +19,18 @@ NOTE:: pip install the items below;not included in python standard packages
 import os
 import sys
 import subprocess
-import tarfile
+import zipfile
 import shutil
 import configparser
-import smtplib
-from pathlib import Path
+from pathlib import Path #pylint: disable=W0611
 from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
 import glob
 import threading #pylint: disable=W0611
 import socket #pylint: disable=W0611
-import psutil
-from vncdotool import api #pylint: disable=W0611
+import psutil #pylint: disable=E0401
+from vncdotool import api #pylint: disable=E0401,W0611
 
 class Triagetools(object):
     """Triage tool for bug catching and error reporting"""
@@ -45,7 +44,7 @@ class Triagetools(object):
         self.cutoff = datetime.now().replace(tzinfo=None) - timedelta(hours=24)
         self.message = message
         self.time_pattern = r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)"
-        self.tar_filename = ""
+        self.zip_filename = ""
 
         # Create a ConfigParser object
         self.config = configparser.ConfigParser()
@@ -109,7 +108,7 @@ class Triagetools(object):
         self.email_alerts = self.config.getboolean("Report", "email_alerts")
         if self.email_alerts:
             self.target_email = self.config["Report"]["recipient_email"]
-            #self.sender_email = self.config["Report"]["sender_email"]
+            self.machine_name = self.config["Report"]["machine_name"]
             #self.sender_password = self.config["Report"]["sender_password"]
         self.r_path = self.config["Report"]["report_path"]
         self.log_dir = self.config["Logs"]["logs_dir"]
@@ -239,7 +238,7 @@ class Triagetools(object):
         return sorted(displays, key=lambda d: int(d[1:]))
 
     def gather_logs(self):
-        ''' Gathers Logs from all paths to dump into tar comp. '''
+        ''' Gathers Logs from all paths to dump into zip comp. '''
         #Iterate through log paths in config file
         for subdir, dirs, files in os.walk(self.log_dir): # pylint: disable = W0612
             for file in files:
@@ -293,26 +292,26 @@ class Triagetools(object):
                         print(f"An unexpected error occurred: {e}")
 
     def compress_report(self):
-        '''Compresses report file into a tar.gz format to be emailed'''
-        #Tar file and add it to message
-        #with tarfile.open(f"{self.reports_path}/gecko_{self.utc_date}.tar.gz", "w:gz") as tar:
-        #    tar.add(f"{self.reports_path}", arcname=os.path.basename(f"{self.reports_path}"))
+        """Compresses report files into a .zip format to be emailed"""
 
         filename = f"{self.reports_path}/gecko_{self.utc_date}"
-        filename = filename.replace(" ", "_").replace('+','')
-        self.tar_filename = filename.replace(':', '').replace('.', '_') + ".tar.gz"
-        with tarfile.open(self.tar_filename, "w:gz") as tar:
-            for root, dirs, files in os.walk(self.reports_path):
+        filename = filename.replace(" ", "_").replace("+", "")
+        self.zip_filename = filename.replace(":", "").replace(".", "_") + ".zip"
+
+        with zipfile.ZipFile(self.zip_filename, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(self.reports_path): # pylint: disable = W0612
                 for file in files:
 
-                    # Only include files containing utc_time
-                    if self.utc_time in file or ".log" in file:
+                    # Only include files containing utc_time OR log files
+                    if self.utc_time in file or file.endswith(".log"):
                         full_path = os.path.join(root, file)
 
-                        # Keep relative structure inside tar
+                        # Keep relative structure inside zip
                         arcname = os.path.relpath(full_path, self.reports_path)
 
-                        tar.add(full_path, arcname=arcname)
+                        zipf.write(full_path, arcname=arcname)
+
+        print(f"Created ZIP file: {self.zip_filename}")
 
     def grab_science_image(self):
         '''Grabs most recent science image(s) to include in triage'''
@@ -354,11 +353,19 @@ class Triagetools(object):
         # Create email
         msg = EmailMessage()
         msg['Subject'] = f'Gecko Report {self.utc_date}'
-        msg['From'] = self.sender_email   # replace with actual sender
+        msg['From'] = self.machine_name   # replace with actual sender
         msg['To'] = self.target_email     # can be comma-separated string or list
+        zip_path = os.path.join(self.reports_path, self.zip_filename)
 
         # Email body
-        msg.set_content("Please see attached report images.")
+        body = (
+            f"{self.message}\n\n"
+            "To view logs and images:\n"
+            "  1. Download the attached .zip file\n"
+            "  2. Extract it\n\n"
+            f"Compressed report location:\n{zip_path}"
+        )
+        msg.set_content(body)
 
         #.txt file first
         with open(self.report_name, 'rb') as f:
@@ -369,17 +376,17 @@ class Triagetools(object):
                 filename=os.path.basename(self.report_name)
                 )
 
-        #tar.gz file next
-        with open(self.tar_filename, 'rb') as f:
-            msg.add_attachment(
-                f.read(),
-                maintype='application',
-                subtype='gzip',
-                filename=os.path.basename(self.tar_filename)
-            )
+        #.zip file next
+        #with open(self.zip_filename, 'rb') as f:
+        #    msg.add_attachment(
+        #        f.read(),
+        #        maintype='application',
+        #        subtype='gzip',
+        #        filename=os.path.basename(self.zip_filename)
+        #    )
 
         # Attach PNG images recursively from the reports_path
-        image_files = glob.glob(os.path.join(self.reports_path, '**', f'*{self.utc_time}.png'), recursive=True)
+        #image_files = glob.glob(os.path.join(self.reports_path, '**', f'*{self.utc_time}.png'), recursive=True)
         #for file in image_files:
         #    with open(file, 'rb') as fp:
         #        img_data = fp.read()
@@ -396,14 +403,14 @@ class Triagetools(object):
         #    smtp.send_message(msg)
         #print(f"Report sent to {self.target_email}")
 
-        for file in image_files:
-            with open(file, "rb") as fp:
-                msg.add_attachment(
-                    fp.read(),
-                    maintype="image",
-                    subtype="png",
-                    filename=os.path.basename(file)
-                )
+        #for file in image_files:
+        #    with open(file, "rb") as fp:
+        #        msg.add_attachment(
+        #            fp.read(),
+        #            maintype="image",
+        #            subtype="png",
+        #            filename=os.path.basename(file)
+        #        )
 
         # Send using local sendmail instead of SMTP
         try:
@@ -416,3 +423,11 @@ class Triagetools(object):
 
         except Exception as e: #pylint: disable=W0718
             print("Failed to send report:", e)
+
+    def cleanup_reports_dir(self):
+        """Clean up and rid of all files that are not a .zip file"""
+        for root, dirs, files in os.walk(self.reports_path): # pylint: disable = W0612
+            for filename in files:
+                full_path = os.path.join(self.reports_path, filename)
+                if not full_path.endswith(".zip"):
+                    os.remove(full_path)

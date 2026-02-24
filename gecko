@@ -83,8 +83,9 @@ def run_triage():
             gecko.grab_science_image()
             gecko.compress_report()
 
-        if gecko.email_alerts:
-            gecko.send_report()
+            if gecko.email_alerts:
+                gecko.send_report()
+                gecko.cleanup_reports_dir()
             print("\nTriage workflow complete!")
 
     else:
