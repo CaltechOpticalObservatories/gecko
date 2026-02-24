@@ -22,16 +22,15 @@ import subprocess
 import zipfile
 import shutil
 import configparser
-import smtplib
-from pathlib import Path
+from pathlib import Path #pylint: disable=W0611
 from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
 import glob
 import threading #pylint: disable=W0611
 import socket #pylint: disable=W0611
-import psutil
-from vncdotool import api #pylint: disable=W0611
+import psutil #pylint: disable=E0401
+from vncdotool import api #pylint: disable=E0401,W0611
 
 class Triagetools(object):
     """Triage tool for bug catching and error reporting"""
@@ -300,7 +299,7 @@ class Triagetools(object):
         self.zip_filename = filename.replace(":", "").replace(".", "_") + ".zip"
 
         with zipfile.ZipFile(self.zip_filename, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(self.reports_path):
+            for root, dirs, files in os.walk(self.reports_path): # pylint: disable = W0612
                 for file in files:
 
                     # Only include files containing utc_time OR log files
@@ -356,7 +355,7 @@ class Triagetools(object):
         msg['Subject'] = f'Gecko Report {self.utc_date}'
         msg['From'] = self.machine_name   # replace with actual sender
         msg['To'] = self.target_email     # can be comma-separated string or list
-        zip_path = full_path = os.path.join(self.reports_path, self.zip_filename)
+        zip_path = os.path.join(self.reports_path, self.zip_filename)
 
         # Email body
         body = (
@@ -427,7 +426,7 @@ class Triagetools(object):
 
     def cleanup_reports_dir(self):
         """Clean up and rid of all files that are not a .zip file"""
-        for root, dirs, files in os.walk(self.reports_path):
+        for root, dirs, files in os.walk(self.reports_path): # pylint: disable = W0612
             for filename in files:
                 full_path = os.path.join(self.reports_path, filename)
                 if not full_path.endswith(".zip"):
