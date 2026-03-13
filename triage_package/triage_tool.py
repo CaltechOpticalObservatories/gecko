@@ -116,7 +116,7 @@ class Triagetools(object):
             self.target_email = self.config["Report"]["recipient_email"]
             self.include_images = self.config.getboolean("Report","Include images in email?")
             self.attach_report = self.config.getboolean("Report","Include report in email?")
-        self.compression = (self.config["Reports"]["Compression type?(tar or zip)"]).lower()
+        self.compression = (self.config["Reports"]["compression"]).lower()
         self.r_path = self.config["Report"]["report_path"]
         self.log_dir = self.config["Logs"]["logs_dir"]
         self.science_dir = self.config["Logs"]["science_dir"]
@@ -322,35 +322,6 @@ class Triagetools(object):
                             archive.write(full_path, arcname=arcname)
 
         print(f"Created archive: {self.filename}")
-        #filename = f"{self.reports_path}/gecko_{self.utc_date}"
-        #filename = filename.replace(" ", "_").replace("+", "")
-        #if self.compression == "tar":
-        #    # Clean up filename for the archive
-        #    self.filename = filename.replace(":", "").replace(".", "_") + ".tar.gz"
-        #    # Use "w:gz" for Write with Gzip compression
-        #    with tarfile.open(self.filename, "w:gz") as tar:
-        #        for root, dirs, files in os.walk(self.reports_path):
-        #            for file in files:
-        #                # Only include files containing utc_time OR log files
-        #                if self.utc_time in file or file.endswith(".log"):
-        #                   full_path = os.path.join(root, file)
-        #                    # Keep relative structure inside tar
-        #                    arcname = os.path.relpath(full_path, self.reports_path)
-        #                    # In tarfile, use .add() instead of .write()
-        #                    tar.add(full_path, arcname=arcname)
-        #    print(f"Created TAR.GZ file: {self.filename}")
-        #else: #make a .zip file
-        #    self.filename = filename.replace(":", "").replace(".", "_") + ".zip"
-        #    with zipfile.ZipFile(self.filename, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-        #        for root, dirs, files in os.walk(self.reports_path): # pylint: disable = W0612
-        #            for file in files:
-        #                # Only include files containing utc_time OR log files
-        #                if self.utc_time in file or file.endswith(".log"):
-        #                    full_path = os.path.join(root, file)
-        #                    # Keep relative structure inside zip
-        #                    arcname = os.path.relpath(full_path, self.reports_path)
-        #                    zipf.write(full_path, arcname=arcname)
-        #    print(f"Created ZIP file: {self.filename}")
 
     def grab_science_image(self):
         '''Grabs most recent science image(s) to include in triage'''
