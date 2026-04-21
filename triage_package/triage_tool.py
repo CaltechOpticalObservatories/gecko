@@ -27,6 +27,8 @@ from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
 import glob
+import smtplib
+import tarfile
 import threading #pylint: disable=W0611
 import socket #pylint: disable=W0611
 import psutil #pylint: disable=E0401
@@ -105,17 +107,17 @@ class Triagetools(object):
             sys.exit(0)
 
         #Report Section(report file name and current UTCdate folder)
-        self.email_alerts = self.config.getboolean("Report", "Send email alerts?")
+        self.email_alerts = self.config.getboolean("Report", "email_alerts")
         if self.email_alerts:
-            self.machine_email = self.config.getboolean("Report","Send email from machine?")
+            self.machine_email = self.config.getboolean("Report","machine_email")
             if not self.machine_email:
                 self.sender_email = self.config["Report"]["sender_email"]
                 self.sender_password = self.config["Report"]["sender_password"]
             else:
                 self.machine_name = self.config["Report"]["machine_name"]
             self.target_email = self.config["Report"]["recipient_email"]
-            self.include_images = self.config.getboolean("Report","Include images in email?")
-            self.attach_report = self.config.getboolean("Report","Include report in email?")
+            self.include_images = self.config.getboolean("Report","include_images")
+            self.attach_report = self.config.getboolean("Report","attach_report")
         self.compression = (self.config["Reports"]["compression"]).lower()
         self.r_path = self.config["Report"]["report_path"]
         self.log_dir = self.config["Logs"]["logs_dir"]
@@ -314,7 +316,7 @@ class Triagetools(object):
                     if self.utc_time in file or file.endswith(".log"):
                         full_path = os.path.join(root, file)
                         arcname = os.path.relpath(full_path, self.reports_path)
-                        
+
                         # Use duck-typing: both objects have different methods for adding files
                         if isinstance(archive, tarfile.TarFile):
                             archive.add(full_path, arcname=arcname)
@@ -424,7 +426,7 @@ class Triagetools(object):
 
             # Extract domain from sender email (e.g., 'user@gmail.com' -> 'gmail.com')
             domain = self.sender_email.split('@')[-1].lower()
-            
+
             # Get settings or default to Outlook if not found
             server_host, server_port = smtp_settings.get(domain, ("smtp-mail.outlook.com", 587))
 
@@ -435,7 +437,7 @@ class Triagetools(object):
                     smtp.login(self.sender_email, self.sender_password) # Must be an App Password
                     smtp.send_message(msg)
                 print(f"Report successfully sent to {self.target_email}")
-            except Exception as e:
+            except Exception as e: #pylint: disable=W0718
                 print(f"Failed to send email: {e}")
         else:
             try:
