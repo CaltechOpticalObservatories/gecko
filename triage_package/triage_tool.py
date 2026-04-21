@@ -27,6 +27,8 @@ from email.message import EmailMessage
 import re
 from datetime import datetime, timezone, timedelta
 import glob
+import smtplib
+import tarfile
 import threading #pylint: disable=W0611
 import socket #pylint: disable=W0611
 import psutil #pylint: disable=E0401
@@ -44,7 +46,7 @@ class Triagetools(object):
         self.cutoff = datetime.now().replace(tzinfo=None) - timedelta(hours=24)
         self.message = message
         self.time_pattern = r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)"
-        self.zip_filename = ""
+        self.filename = ""
 
         # Create a ConfigParser object
         self.config = configparser.ConfigParser()
@@ -107,9 +109,16 @@ class Triagetools(object):
         #Report Section(report file name and current UTCdate folder)
         self.email_alerts = self.config.getboolean("Report", "email_alerts")
         if self.email_alerts:
+            self.machine_email = self.config.getboolean("Report","machine_email")
+            if not self.machine_email:
+                self.sender_email = self.config["Report"]["sender_email"]
+                self.sender_password = self.config["Report"]["sender_password"]
+            else:
+                self.machine_name = self.config["Report"]["machine_name"]
             self.target_email = self.config["Report"]["recipient_email"]
-            self.machine_name = self.config["Report"]["machine_name"]
-            #self.sender_password = self.config["Report"]["sender_password"]
+            self.include_images = self.config.getboolean("Report","include_images")
+            self.attach_report = self.config.getboolean("Report","attach_report")
+        self.compression = (self.config["Reports"]["compression"]).lower()
         self.r_path = self.config["Report"]["report_path"]
         self.log_dir = self.config["Logs"]["logs_dir"]
         self.science_dir = self.config["Logs"]["science_dir"]
@@ -132,12 +141,6 @@ class Triagetools(object):
         #System
         self.os = self.config["System"]["os"]
         self.os_version = self.config["System"]["os_version"]
-
-        #VNC information
-        #self.host = self.config["VNC"]["host"]
-        #self.password = self.config["VNC"]["password"]
-        #temp_sessions = self.config["VNC"]["vnc_sessions"]
-        #self.vnc_sessions = [int(num.strip()) for num in temp_sessions.split(',')]
 
         #Put main message into the file
         with open(self.report_name, 'w', encoding='utf-8') as report_file:
@@ -294,24 +297,33 @@ class Triagetools(object):
     def compress_report(self):
         """Compresses report files into a .zip format to be emailed"""
 
-        filename = f"{self.reports_path}/gecko_{self.utc_date}"
-        filename = filename.replace(" ", "_").replace("+", "")
-        self.zip_filename = filename.replace(":", "").replace(".", "_") + ".zip"
+        # 1. Define the base filename
+        base_name = f"{self.reports_path}/gecko_{self.utc_date}".replace(" ", "_").replace("+", "")
+        clean_name = base_name.replace(":", "").replace(".", "_")
 
-        with zipfile.ZipFile(self.zip_filename, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(self.reports_path): # pylint: disable = W0612
+        # 2. Handle the specific compression logic
+        if self.compression == "tar":
+            self.filename = clean_name + ".tar.gz"
+            context_manager = tarfile.open(self.filename, "w:gz")
+        else:
+            self.filename = clean_name + ".zip"
+            context_manager = zipfile.ZipFile(self.filename, "w", compression=zipfile.ZIP_DEFLATED)
+
+        # 3. Perform the actual archiving
+        with context_manager as archive:
+            for root, _, files in os.walk(self.reports_path):
                 for file in files:
-
-                    # Only include files containing utc_time OR log files
                     if self.utc_time in file or file.endswith(".log"):
                         full_path = os.path.join(root, file)
-
-                        # Keep relative structure inside zip
                         arcname = os.path.relpath(full_path, self.reports_path)
 
-                        zipf.write(full_path, arcname=arcname)
+                        # Use duck-typing: both objects have different methods for adding files
+                        if isinstance(archive, tarfile.TarFile):
+                            archive.add(full_path, arcname=arcname)
+                        else:
+                            archive.write(full_path, arcname=arcname)
 
-        print(f"Created ZIP file: {self.zip_filename}")
+        print(f"Created archive: {self.filename}")
 
     def grab_science_image(self):
         '''Grabs most recent science image(s) to include in triage'''
@@ -355,15 +367,15 @@ class Triagetools(object):
         msg['Subject'] = f'Gecko Report {self.utc_date}'
         msg['From'] = self.machine_name   # replace with actual sender
         msg['To'] = self.target_email     # can be comma-separated string or list
-        zip_path = os.path.join(self.reports_path, self.zip_filename)
+        compressed_file_path = os.path.join(self.reports_path, self.filename)
 
         # Email body
         body = (
             f"{self.message}\n\n"
             "To view logs and images:\n"
-            "  1. Download the attached .zip file\n"
+            "  1. Download the attached compressed file\n"
             "  2. Extract it\n\n"
-            f"Compressed report location:\n{zip_path}"
+            f"Compressed report location:\n{compressed_file_path}"
         )
         msg.set_content(body)
 
@@ -376,53 +388,68 @@ class Triagetools(object):
                 filename=os.path.basename(self.report_name)
                 )
 
-        #.zip file next
-        #with open(self.zip_filename, 'rb') as f:
-        #    msg.add_attachment(
-        #        f.read(),
-        #        maintype='application',
-        #        subtype='gzip',
-        #        filename=os.path.basename(self.zip_filename)
-        #    )
+        #compressed file next
+        # Use == for string comparison; 'is' checks object identity, which can fail for strings
+        if self.compression == "tar":
+            subtype = 'gzip' # Standard for .tar.gz
+        else:
+            subtype = 'zip'  # Standard for .zip files
+
+        if self.attach_report:
+            with open(self.filename, 'rb') as f:
+                file_data = f.read()
+                msg.add_attachment(
+                    file_data,
+                    maintype='application',
+                    subtype=subtype,
+                    filename=os.path.basename(self.filename)
+                )
 
         # Attach PNG images recursively from the reports_path
-        #image_files = glob.glob(os.path.join(self.reports_path, '**', f'*{self.utc_time}.png'), recursive=True)
-        #for file in image_files:
-        #    with open(file, 'rb') as fp:
-        #        img_data = fp.read()
-        #        filename = os.path.basename(file)
-        #        msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
+        if self.include_images:
+            image_files = glob.glob(os.path.join(self.reports_path, '**', f'*{self.utc_time}.png'), recursive=True)
+            for file in image_files:
+                with open(file, 'rb') as fp:
+                    img_data = fp.read()
+                    filename = os.path.basename(file)
+                    msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
 
-        ## Send email using local SMTP server
-        #with smtplib.SMTP('localhost') as sender:
-        #    sender.send_message(msg)
+        # Connect to email provider SMTP to send
+        if not self.machine_email:
+            # Map of domains to their SMTP settings
+            smtp_settings = {
+                "gmail.com": ("smtp.gmail.com", 587),
+                "yahoo.com": ("smtp.mail.yahoo.com", 587),
+                "outlook.com": ("smtp-mail.outlook.com", 587),
+                "hotmail.com": ("smtp-mail.outlook.com", 587)
+            }
 
-        # Connect to Gmail SMTP server
-        #with smtplib.SMTP_SSL('smtp.outlook.com', 465) as smtp:
-        #    smtp.login(self.sender_email, self.sender_password)  # use an App Password
-        #    smtp.send_message(msg)
-        #print(f"Report sent to {self.target_email}")
+            # Extract domain from sender email (e.g., 'user@gmail.com' -> 'gmail.com')
+            domain = self.sender_email.split('@')[-1].lower()
 
-        #for file in image_files:
-        #    with open(file, "rb") as fp:
-        #        msg.add_attachment(
-        #            fp.read(),
-        #            maintype="image",
-        #            subtype="png",
-        #            filename=os.path.basename(file)
-        #        )
+            # Get settings or default to Outlook if not found
+            server_host, server_port = smtp_settings.get(domain, ("smtp-mail.outlook.com", 587))
 
-        # Send using local sendmail instead of SMTP
-        try:
-            subprocess.run(
-                ["/usr/sbin/sendmail", "-t", "-oi"],
-                input=msg.as_bytes(),
-                check=True
-            )
-            print(f"Report sent to {self.target_email}")
+            try:
+                # Most providers now prefer SMTP + starttls() on port 587
+                with smtplib.SMTP(server_host, server_port) as smtp:
+                    smtp.starttls()  # Upgrade the connection to secure
+                    smtp.login(self.sender_email, self.sender_password) # Must be an App Password
+                    smtp.send_message(msg)
+                print(f"Report successfully sent to {self.target_email}")
+            except Exception as e: #pylint: disable=W0718
+                print(f"Failed to send email: {e}")
+        else:
+            try:
+                subprocess.run(
+                    ["/usr/sbin/sendmail", "-t", "-oi"],
+                    input=msg.as_bytes(),
+                    check=True
+                )
+                print(f"Report sent to {self.target_email}")
 
-        except Exception as e: #pylint: disable=W0718
-            print("Failed to send report:", e)
+            except Exception as e: #pylint: disable=W0718
+                print("Failed to send report:", e)
 
     def cleanup_reports_dir(self):
         """Clean up and rid of all files that are not a .zip file"""
