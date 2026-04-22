@@ -16,7 +16,9 @@ NOTE:: pip install the items below;not included in python standard packages
                        -Elijah Anakalea-Buckley
 '''
 import argparse
+import os
 from triage_package.triage_tool import Triagetools
+from triage_package import oneuptime_incident as oneuptime
 
 #Fill out section then run like a CLI executable!###############
 CONFIG_PATH = "triage_package/triage.ini"
@@ -82,6 +84,32 @@ def run_triage():
             gecko.take_screenshots()
             gecko.grab_science_image()
             gecko.compress_report()
+
+            #Use the message as the incident title and description for OneUptime
+            #--title", required=True, help="Incident title"
+            #--description", default="", help="Incident description"
+            #--screenshot", default="", help="Path to screenshot file to attach"
+            #--files", nargs="*", default=[], help="Additional files to attach (e.g. log files)"
+            #--url", default="", help="OneUptime URL (overrides ONEUPTIME_URL env var)"
+            #--api-key", default="", help="API Key (overrides ONEUPTIME_API_KEY env var)"
+            #--project-id", default="", help="Project ID (overrides ONEUPTIME_PROJECT_ID env var)"
+
+            screenshot_list = []
+            files_list = []
+
+            for root, _, files in os.walk(gecko.reports_path):
+                for file in files:
+                    if gecko.utc_time in file and file.endswith(".png"):
+                        screenshot_list.append(file)
+                    if gecko.utc_time in file and file.endswith(".txt"):
+                        files_list.append(file)
+
+            if gecko.report_incident:
+                oneuptime.report_incident(title=args.message, description=user_message,
+                                          screenshot_path=screenshot_list, files=files_list,
+                                          url=gecko.oneuptime_url,
+                                          api_key=gecko.oneuptime_api_key,
+                                          project_id=gecko.oneuptime_project_id)
 
             if gecko.email_alerts:
                 gecko.send_report()

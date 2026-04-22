@@ -118,6 +118,11 @@ class Triagetools(object):
             self.target_email = self.config["Report"]["recipient_email"]
             self.include_images = self.config.getboolean("Report","include_images")
             self.attach_report = self.config.getboolean("Report","attach_report")
+        self.report_incident = self.config.getboolean("Report","report_incident")
+        if self.report_incident:
+            self.oneuptime_url = self.config["Report"]["ONEUPTIME_URL"]
+            self.oneuptime_api_key = self.config["Report"]["ONEUPTIME_API_KEY"]
+            self.oneuptime_project_id = self.config["Report"]["ONEUPTIME_PROJECT_ID"]
         self.compression = (self.config["Reports"]["compression"]).lower()
         self.r_path = self.config["Report"]["report_path"]
         self.log_dir = self.config["Logs"]["logs_dir"]
@@ -200,7 +205,7 @@ class Triagetools(object):
         print(f"Found Sessions: {', '.join(sessions)}")
 
         for s in sessions:
-            try:
+            try: 
                 out = self.capture_session(s)
                 print(f"Captured Session: {s} -> {out}")
             except Exception as e: #pylint: disable=W0718
