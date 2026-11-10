@@ -1,4 +1,8 @@
-# Gecko Triage tool
+# Gecko Triage Tool
+
+[![CI](https://github.com/CaltechOpticalObservatories/gecko/actions/workflows/ci.yml/badge.svg)](https://github.com/CaltechOpticalObservatories/gecko/actions/workflows/ci.yml)
+[![Docs](https://github.com/CaltechOpticalObservatories/gecko/actions/workflows/docs.yml/badge.svg)](https://caltechopticalobservatories.github.io/gecko/)
+
 ## What is Gecko?
 
 Gecko is a command-line triage and diagnostics tool designed to help operators and engineers quickly collect useful debugging information when an instrument or system encounters a problem.
@@ -19,8 +23,8 @@ Gecko is especially useful during:
 
 When run in triage mode, Gecko can automatically gather:
 
-- System and application log files  
-- Instrument-specific telemetry or diagnostic outputs  
+- System information (CPU, memory, temperatures)  
+- System and application log files, with recent errors and warnings summarized  
 - Screenshots of the current system state  
 - Science images or recent exposure data (if configured)  
 - A compressed report bundle for archiving or emailing  
@@ -31,104 +35,32 @@ When run in triage mode, Gecko can automatically gather:
 
 Gecko provides a consistent and repeatable way to capture critical debugging context at the moment an issue occurs. This reduces downtime and helps teams diagnose problems faster, without requiring users to manually locate and send multiple files.
 
-Once initialized, generating a triage report is as simple as:
+## Quick start
+
+Gecko runs on Linux with Python 3.8 or newer.
 
 ```bash
-./gecko -u "your.name" -m "Description of the issue"
+pip install "git+https://github.com/CaltechOpticalObservatories/gecko.git"
+gecko -init                                   # once per machine/account
+gecko -u "your.name" -m "Description of the issue"
 ```
 
-## Table of Contents
+From a source checkout, `./gecko` works the same way.
 
-1. Installation
-2. Setting Up Your Package
-3. Installing Dependencies
-4. Building Your Package
-5. Publishing to PyPI
+> **Upgrading a checkout from before 0.2?** Copy `triage_package/triage.ini` to
+> `~/.config/gecko/gecko.ini` **before** `git pull`. See the
+> [upgrade notes](https://caltechopticalobservatories.github.io/gecko/installation.html#migrating).
 
-### Installation
+## Documentation
 
-To install the package in editable mode (ideal for development), follow these steps:
+**https://caltechopticalobservatories.github.io/gecko/**
 
-### Requirements
+- [Operator guide](docs/operator-guide.md): filing a report
+- [Installation](docs/installation.md) and [configuration](docs/configuration.md): setting up a machine
+- [What's in a report](docs/report-contents.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Development](docs/development.md): tests, tox, docs, releasing
 
-- Python 3.7 or higher
-- `pip` (ensure it's the latest version)
-- `setuptools` 42 or higher (for building the package)
+## License
 
-### 1. Clone the repository
-
-First, clone the repository to your local machine:
-
-```bash
-git clone https://github.com/CaltechOpticalObservatories/gecko.git
-cd gecko
-```
-
-### 2. Set Up Your Python Environment
-
-Create a virtual environment for your package:
-
-```bash
-python -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install Build Dependencies
-
-Make sure setuptools and pip are up to date:
-
-```bash
-pip install --upgrade pip setuptools wheel
-```
-
-## Installing Dependencies
-
-To install your package in editable mode for development, use the following command:
-
-```bash
-pip install -e .
-```
-
-This will install the package, allowing you to edit it directly and have changes take effect immediately without reinstalling.
-
-To install any optional dependencies, such as development dependencies, use:
-
-```bash
-pip install -e .[dev]
-```
-
-## Making the executable(optional)
-
-Run this in your terminal to create the gecko executable:
-
-```bash
-cd gecko
-chmod +x gecko
-```
-
-### Filling Out Config File
-
-You can run the command below and you will be prompted with questions to fill out the config file. Read promps and answer accordingly:
-
-```bash
-python3 gecko -init
-(or ./gecko -init)
-```
-
-[Initialization Guide](triage_package/INIT_GUIDE.md)
-
-### Make Executable avaiable anywhere in the system
-
-Symlink the executable file to bin:
-
-```bash
-sudo ln -s /path/to/repo/Gecko/gecko /usr/local/bin/gecko
-```
-
-### Generate a report
-
-You can now generate gecko reports from any terminal on the machine! (assuming python is available globally)
-
-```bash
-./gecko -m "<insert description of bug or instrument failure here>"
-```
+MIT. See [LICENSE](LICENSE).

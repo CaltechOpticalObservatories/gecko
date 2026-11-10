@@ -1,0 +1,4 @@
+/* The landing page cards read better with even heights. */
+.sd-card {
+  height: 100%;
+}

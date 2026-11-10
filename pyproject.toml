@@ -1,41 +1,81 @@
 [build-system]
-# Specifies the build system to use. 
-requires = ["setuptools>=42"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# Basic information about your project.
-name = "gecko" 
-version = "0.1.0" 
-description = "Information gathering tool for a saving state of a machine after a crash for later diagnosis"
-readme = "README.md" 
+name = "gecko"
+dynamic = ["version"]
+description = "Capture the state of an instrument machine after a crash or anomaly for later diagnosis"
+readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.8"
 authors = [
-  {name = "Elijah Anakalea-Buckley", email = "elijahab@caltech.edu"}
+  { name = "Elijah Anakalea-Buckley", email = "elijahab@caltech.edu" },
 ]
 dependencies = [
-    "pillow",
-    "vncdotool",
-    "psutil"
-    ]
-
+  "psutil>=5.9",
+]
 classifiers = [
-  "Programming Language :: Python"
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Astronomy",
+  "Topic :: System :: Logging",
 ]
 
 [project.urls]
-# Various URLs related to your project. These links are displayed on PyPI.
-Repository = "https://github.com/CaltechOpticalObservatories/gecko.git"
+Repository = "https://github.com/CaltechOpticalObservatories/gecko"
+Documentation = "https://caltechopticalobservatories.github.io/gecko/"
+Changelog = "https://github.com/CaltechOpticalObservatories/gecko/blob/main/CHANGELOG.md"
 
 [project.scripts]
-# Defines command-line scripts for your package. Replace with your script and function.
-your-command = "your_module:your_function"
+gecko = "gecko.cli:main"
 
 [project.optional-dependencies]
-# Optional dependencies that can be installed with extra tags, like "dev".
-dev = [
-  "pytest", 
-  "black",
-  "flake8"
+test = [
+  "pytest>=7",
 ]
+lint = [
+  "ruff>=0.5",
+]
+docs = [
+  "sphinx>=7",
+  "shibuya",
+  "myst-parser>=2",
+  "sphinx-copybutton",
+  "sphinx-design>=0.6",
+  "sphinx-argparse>=0.4",
+]
+dev = [
+  "gecko[test,lint]",
+  "tox>=4",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "gecko.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+gecko = ["triage.ini"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

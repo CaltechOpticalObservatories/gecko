@@ -1,40 +1,39 @@
-#!/usr/bin/env python3
-'''
- -*- coding: utf-8 -*-
- File: triage_tool/triage_tool.py
- Author: Elijah Anakalea-Buckley
- Purpose: Triage aspects of any observatory system or instrument to provide
-          a quick overview of the system health and status at any point.
-          Specifically designed for execution at a crash or issue during
-          observation and potencially adapts to monitoring of system health
-          over time. 
+"""Core Gecko triage workflow.
 
-NOTE:: pip install the items below;not included in python standard packages
-       pip install pyscreenshot
-       pip install psutil
-       pip install vncdotool
-       pip install pillow
-                       -Elijah Anakalea-Buckley
-'''
+Triage aspects of any observatory system or instrument to provide a quick
+overview of the system health and status at any point. Specifically designed
+for execution at a crash or issue during observation.
+
+Original author: Elijah Anakalea-Buckley
+"""
+import configparser
+import glob
 import os
-import sys
+import re
+import shutil
 import subprocess
 import tarfile
-import shutil
-import configparser
-import smtplib
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
-import re
-from datetime import datetime, timezone, timedelta
-import glob
-import threading #pylint: disable=W0611
-import socket #pylint: disable=W0611
+
 import psutil
-from vncdotool import api #pylint: disable=W0611
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+class GeckoConfigError(RuntimeError):
+    """Raised when the Gecko configuration file is missing values or not initialized."""
+
 
 class Triagetools(object):
-    """Triage tool for bug catching and error reporting"""
+    """Collect diagnostics and build a Gecko report bundle.
+
+    Args:
+        config: Path to an initialized Gecko ``.ini`` configuration file.
+        message: User-provided description written at the top of the report.
+        init: When true, interactively prompt for every setting and write
+            ``config`` instead of loading it.
+    """
 
     def __init__(self, config: str, message:str = "", init = False):
         # Grab UTC, and load config file
@@ -46,6 +45,9 @@ class Triagetools(object):
         self.message = message
         self.time_pattern = r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)"
         self.tar_filename = ""
+        # Files copied into the report folder whose names do not contain
+        # utc_time (e.g. science images); compress_report() adds them explicitly.
+        self.extra_files = []
 
         # Create a ConfigParser object
         self.config = configparser.ConfigParser()
@@ -99,24 +101,24 @@ class Triagetools(object):
             raise FileNotFoundError(f"Configuration file {config} not found")
         self.config.read(config)
 
-        initialized = self.config.getboolean("System", "initialized")
-
-        if not initialized:
-            print("\nYou have not Initialized this application! Please run: 'gecko -init'\n")
-            sys.exit(0)
+        if not self._get_bool("System", "initialized"):
+            raise GeckoConfigError(
+                f"Configuration file {config} has not been initialized. "
+                f"Run: gecko -init --config {config}"
+            )
 
         #Report Section(report file name and current UTCdate folder)
-        self.email_alerts = self.config.getboolean("Report", "email_alerts")
+        self.email_alerts = self._get_bool("Report", "email_alerts")
         if self.email_alerts:
-            self.target_email = self.config["Report"]["recipient_email"]
-            self.machine_name = self.config["Report"]["machine_name"]
-            #self.sender_password = self.config["Report"]["sender_password"]
-        self.r_path = self.config["Report"]["report_path"]
-        self.log_dir = self.config["Logs"]["logs_dir"]
-        self.science_dir = self.config["Logs"]["science_dir"]
+            self.target_email = self._require("Report", "recipient_email")
+            self.machine_name = self._require("Report", "machine_name")
+        self.r_path = self._require("Report", "report_path")
+        self.log_dir = self._require("Logs", "logs_dir")
+        self.science_dir = self._require("Logs", "science_dir")
+        if not os.path.isdir(self.r_path):
+            raise GeckoConfigError(f"Report.report_path does not exist: {self.r_path}")
         self.reports_path = f"{self.r_path}/{self.current_utc_date}"
-        if not os.path.exists(f"{self.reports_path}"):
-            os.mkdir(f"{self.reports_path}")
+        os.makedirs(self.reports_path, exist_ok=True)
         self.report_name = f"{self.reports_path}/gecko_report_{self.utc_time}.txt"
         self.regex_pattern = r"^.*error.*$|^.*warning.*$"
         log_time_pattern = self.config["Report"]["time_pattern"]
@@ -124,21 +126,15 @@ class Triagetools(object):
             # document the regex
             self.time_pattern = re.compile(log_time_pattern)
         except re.error as e:
-            raise ValueError(f"Invalid regex in config: {e}")#pylint: disable=W0707
+            raise GeckoConfigError(f"Invalid regex in Report.time_pattern: {e}") from e
 
         #Machine Section
-        self.cpu_threshold = self.config["Machine"]["cpu_threshold"]
-        self.memory_threshold = self.config["Machine"]["memory_threshold"]
+        self.cpu_threshold = self.config.get("Machine", "cpu_threshold", fallback="")
+        self.memory_threshold = self.config.get("Machine", "memory_threshold", fallback="")
 
         #System
-        self.os = self.config["System"]["os"]
-        self.os_version = self.config["System"]["os_version"]
-
-        #VNC information
-        #self.host = self.config["VNC"]["host"]
-        #self.password = self.config["VNC"]["password"]
-        #temp_sessions = self.config["VNC"]["vnc_sessions"]
-        #self.vnc_sessions = [int(num.strip()) for num in temp_sessions.split(',')]
+        self.os = self.config.get("System", "os", fallback="")
+        self.os_version = self.config.get("System", "os_version", fallback="")
 
         #Put main message into the file
         with open(self.report_name, 'w', encoding='utf-8') as report_file:
@@ -146,6 +142,18 @@ class Triagetools(object):
             report_file.write(f"{self.message}\n\n")
 
         print("Configuration loaded successfully.")
+
+    def _get_bool(self, section, key):
+        """Read a boolean setting, treating a missing or blank value as false."""
+        value = self.config.get(section, key, fallback="").split("#")[0].strip().lower()
+        return value in _TRUE_VALUES
+
+    def _require(self, section, key):
+        """Read a setting that must be present and non-empty."""
+        value = self.config.get(section, key, fallback="").strip()
+        if not value:
+            raise GeckoConfigError(f"{section}.{key} must be set in {self.config_file}")
+        return value
 
     def gather_system_info(self):
         ''' Gather system information such as CPU, memory, disk usage '''
@@ -162,7 +170,9 @@ class Triagetools(object):
         #Interval, usage over that period in sec; perself.cpu = separates
 
         # Temperature
-        temps = psutil.sensors_temperatures() #Dict
+        # sensors_temperatures() only exists on some platforms (e.g. Linux)
+        sensors = getattr(psutil, "sensors_temperatures", None)
+        temps = sensors() if sensors else {} #Dict
         # Memory
         virtual_memory = psutil.virtual_memory() #<class 'psutil._pslinux.svmem'>
         system_str = f"{self.os} :: {self.os_version}"
@@ -192,7 +202,7 @@ class Triagetools(object):
         sessions = self.find_displays()
 
         if not sessions:
-            print("no X11 diaplays found")
+            print("No X11 displays found")
             return
 
         print(f"Found Sessions: {', '.join(sessions)}")
@@ -298,11 +308,14 @@ class Triagetools(object):
         #with tarfile.open(f"{self.reports_path}/gecko_{self.utc_date}.tar.gz", "w:gz") as tar:
         #    tar.add(f"{self.reports_path}", arcname=os.path.basename(f"{self.reports_path}"))
 
-        filename = f"{self.reports_path}/gecko_{self.utc_date}"
+        # Sanitize only the file name; the configured report path may contain '.' etc.
+        filename = f"gecko_{self.utc_date}"
         filename = filename.replace(" ", "_").replace('+','')
-        self.tar_filename = filename.replace(':', '').replace('.', '_') + ".tar.gz"
+        filename = filename.replace(':', '').replace('.', '_') + ".tar.gz"
+        self.tar_filename = os.path.join(self.reports_path, filename)
+        added = set()
         with tarfile.open(self.tar_filename, "w:gz") as tar:
-            for root, dirs, files in os.walk(self.reports_path):
+            for root, dirs, files in os.walk(self.reports_path): # pylint: disable = W0612
                 for file in files:
 
                     # Only include files containing utc_time
@@ -313,6 +326,14 @@ class Triagetools(object):
                         arcname = os.path.relpath(full_path, self.reports_path)
 
                         tar.add(full_path, arcname=arcname)
+                        added.add(arcname)
+
+            # Files copied by this run that the name filter above misses
+            for full_path in self.extra_files:
+                arcname = os.path.relpath(full_path, self.reports_path)
+                if arcname not in added and os.path.exists(full_path):
+                    tar.add(full_path, arcname=arcname)
+                    added.add(arcname)
 
     def grab_science_image(self):
         '''Grabs most recent science image(s) to include in triage'''
@@ -328,7 +349,7 @@ class Triagetools(object):
             try:
                 if not os.path.exists(i_dir):
                     with open(self.report_name, 'a', encoding='utf-8') as file:
-                        file.write(f"\nScience Directory does not Exist: {dir}\n")
+                        file.write(f"\nScience Directory does not Exist: {i_dir}\n")
                 else:
                     files = [
                     os.path.join(i_dir, f)
@@ -342,8 +363,8 @@ class Triagetools(object):
                     # Pick newest by modification time
                     newest_file = max(files, key=os.path.getmtime)
 
-                    # Copy to destination
-                    shutil.copy(newest_file, self.reports_path)
+                    # Copy to destination and remember it for the tarball
+                    self.extra_files.append(shutil.copy(newest_file, self.reports_path))
             except FileNotFoundError  as e:
                 with open(self.report_name, 'a', encoding='utf-8') as file:
                     file.write(f"\nSource Directory: {i_dir}\n--{e}\n")
@@ -379,33 +400,6 @@ class Triagetools(object):
                 filename=os.path.basename(self.tar_filename)
             )
 
-        # Attach PNG images recursively from the reports_path
-        #image_files = glob.glob(os.path.join(self.reports_path, '**', f'*{self.utc_time}.png'), recursive=True)
-        #for file in image_files:
-        #    with open(file, 'rb') as fp:
-        #        img_data = fp.read()
-        #        filename = os.path.basename(file)
-        #        msg.add_attachment(img_data, maintype='image', subtype='png', filename=filename)
-
-        ## Send email using local SMTP server
-        #with smtplib.SMTP('localhost') as sender:
-        #    sender.send_message(msg)
-
-        # Connect to Gmail SMTP server
-        #with smtplib.SMTP_SSL('smtp.outlook.com', 465) as smtp:
-        #    smtp.login(self.sender_email, self.sender_password)  # use an App Password
-        #    smtp.send_message(msg)
-        #print(f"Report sent to {self.target_email}")
-
-        #for file in image_files:
-        #    with open(file, "rb") as fp:
-        #        msg.add_attachment(
-        #            fp.read(),
-        #            maintype="image",
-        #            subtype="png",
-        #            filename=os.path.basename(file)
-        #        )
-
         # Send using local sendmail instead of SMTP
         try:
             subprocess.run(
@@ -417,3 +411,4 @@ class Triagetools(object):
 
         except Exception as e: #pylint: disable=W0718
             print("Failed to send report:", e)
+
